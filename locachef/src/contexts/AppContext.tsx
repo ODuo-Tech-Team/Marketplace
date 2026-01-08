@@ -465,11 +465,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         proposta: propostaData || undefined
       } as Chat
 
-      console.log('[fetchChat] Chat carregado com proposta:', {
-        chatId,
-        temProposta: !!propostaData,
-        statusProposta: propostaData?.status
-      })
+      console.log('═══════════════════════════════════════════════════════')
+      console.log('[fetchChat] RESULTADO DA BUSCA:')
+      console.log('═══════════════════════════════════════════════════════')
+      console.log('Chat ID:', chatId)
+      console.log('Equipamento ID:', data.equipamento_id)
+      console.log('Locatário ID:', data.locatario_id)
+      console.log('Proposta encontrada?', !!propostaData)
+      if (propostaData) {
+        console.log('✅ PROPOSTA:', {
+          id: propostaData.id,
+          status: propostaData.status,
+          equipamento_id: propostaData.equipamento_id,
+          usuario_id: propostaData.usuario_id,
+          temEndereco: !!propostaData.endereco_logradouro
+        })
+      } else {
+        console.log('❌ NENHUMA PROPOSTA ENCONTRADA PARA ESTE CHAT')
+        console.log('   Verifique se o locador já criou uma proposta')
+      }
+      console.log('═══════════════════════════════════════════════════════')
 
       return chatComProposta
     } catch (err) {

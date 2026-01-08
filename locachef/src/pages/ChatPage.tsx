@@ -915,16 +915,14 @@ export default function ChatPage() {
   const statusProposta = chat?.proposta?.status
   const temEndereco = !!chat?.proposta?.endereco_logradouro
 
-  console.log('🔍 DEBUG CHAT STATE:', {
-    userId,
-    locadorId,
-    locatarioId,
-    isLocador,
-    isLocatario,
-    statusProposta,
-    temEndereco,
-    proposta: chat?.proposta
-  })
+  console.log('═══════════════════════════════════════════════════════')
+  console.log('🔍 LOCAOBRA - DEBUG DO CHAT')
+  console.log('═══════════════════════════════════════════════════════')
+  console.log('👤 VOCÊ É:', isLocador ? '🔧 LOCADOR (dono)' : '📦 LOCATÁRIO (cliente)')
+  console.log('📊 STATUS:', statusProposta || '❌ SEM PROPOSTA')
+  console.log('🏠 ENDEREÇO:', temEndereco ? '✅ Sim' : '❌ Não')
+  console.log('💾 Proposta:', chat?.proposta)
+  console.log('═══════════════════════════════════════════════════════')
 
   // BOTÃO 1: Gerar Proposta (LOCADOR)
   // Aparece quando: é locador E (não tem proposta OU proposta não está aceita)
@@ -935,15 +933,24 @@ export default function ChatPage() {
   // IMPORTANTE: Mesmo que statusProposta seja undefined, se existir chat.proposta, considera como pendente
   const podeEnviarEndereco = isLocatario && (statusProposta === 'pendente' || (chat?.proposta && !statusProposta))
 
-  // BOTÃO 3: Confirmar Entrega (LOCADOR)
+  // BOTÃO 3: Confirmar Entrega (LOCADOR) - FORÇADO PELO SENIOR DAORA
   // Aparece quando: é locador E proposta aceita E tem endereço
   const podeConfirmarEntrega = isLocador && statusProposta === 'aceita' && temEndereco
 
-  console.log('✅ BOTÕES DISPONÍVEIS:', {
-    podeGerarProposta,
-    podeEnviarEndereco,
-    podeConfirmarEntrega
-  })
+  console.log('🔍 DEBUG BOTÃO CONFIRMAR ENTREGA:')
+  console.log('  isLocador?', isLocador)
+  console.log('  statusProposta === aceita?', statusProposta === 'aceita')
+  console.log('  temEndereco?', temEndereco)
+  console.log('  RESULTADO final:', podeConfirmarEntrega)
+
+  console.log('🎯 BOTÕES QUE DEVEM APARECER:')
+  if (podeGerarProposta) console.log('  🟠 Gerar Proposta (LOCADOR)')
+  if (podeEnviarEndereco) console.log('  🟠 Enviar Endereço (LOCATÁRIO)')
+  if (podeConfirmarEntrega) console.log('  🟢 Confirmar Entrega (LOCADOR)')
+  if (!podeGerarProposta && !podeEnviarEndereco && !podeConfirmarEntrega) {
+    console.log('  ⚠️ NENHUM')
+  }
+  console.log('═══════════════════════════════════════════════════════')
 
   // Tratamento de loading - wrapper com altura mínima para estabilidade do DOM
   if (loading) {
