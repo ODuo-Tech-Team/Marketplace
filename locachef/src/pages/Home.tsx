@@ -129,16 +129,36 @@ function SolicitarModal({
   isOpen: boolean
   onClose: () => void
   equipamento: Equipamento | null
-  onEnviar: (mensagem: string) => Promise<void>
+  onEnviar: (dados: {
+    mensagem: string
+    quantidadeDias: number
+    endereco: {
+      logradouro: string
+      cep: string
+      cidade: string
+      uf: string
+    }
+  }) => Promise<void>
   loading: boolean
 }) {
   const [mensagem, setMensagem] = useState('')
+  const [quantidadeDias, setQuantidadeDias] = useState('')
+  const [logradouro, setLogradouro] = useState('')
+  const [cep, setCep] = useState('')
+  const [cidade, setCidade] = useState('')
+  const [uf, setUf] = useState('')
 
   useEffect(() => {
     if (equipamento?.nome) {
       setMensagem(
         `Olá! Tenho interesse em alugar o equipamento "${equipamento.nome}". Podemos conversar sobre disponibilidade e condições?`
       )
+      // Limpa os campos ao abrir
+      setQuantidadeDias('')
+      setLogradouro('')
+      setCep('')
+      setCidade('')
+      setUf('')
     }
   }, [equipamento])
 
@@ -146,7 +166,22 @@ function SolicitarModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await onEnviar(mensagem)
+
+    if (!quantidadeDias || !logradouro || !cep || !cidade || !uf) {
+      alert('Preencha todos os campos obrigatórios!')
+      return
+    }
+
+    await onEnviar({
+      mensagem,
+      quantidadeDias: parseInt(quantidadeDias),
+      endereco: {
+        logradouro,
+        cep,
+        cidade,
+        uf
+      }
+    })
   }
 
   return (
@@ -162,31 +197,120 @@ function SolicitarModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <div className="bg-gray-50 p-3 rounded-lg">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="bg-amber-50 p-3 rounded-lg border-2 border-amber-200">
             <p className="text-sm text-gray-600">Equipamento:</p>
-            <p className="font-semibold text-gray-800">{equipamento.nome}</p>
+            <p className="font-semibold text-gray-800 text-lg">{equipamento.nome}</p>
+            {equipamento.preco_diaria && (
+              <p className="text-amber-600 font-bold text-xl mt-1">
+                R$ {equipamento.preco_diaria.toFixed(2)}/dia
+              </p>
+            )}
           </div>
 
+          {/* Quantidade de dias */}
+          <div>
+            <label className="block text-base font-bold text-gray-700 mb-2">
+              Quantos dias você precisa? *
+            </label>
+            <input
+              type="number"
+              value={quantidadeDias}
+              onChange={(e) => setQuantidadeDias(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+              placeholder="Ex: 7"
+              min="1"
+              required
+            />
+          </div>
+
+          {/* Endereço de entrega */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-gray-800 text-base">Local de Entrega *</h3>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Endereço completo (Rua, Número)
+              </label>
+              <input
+                type="text"
+                value={logradouro}
+                onChange={(e) => setLogradouro(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                placeholder="Ex: Rua das Flores, 123"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CEP
+                </label>
+                <input
+                  type="text"
+                  value={cep}
+                  onChange={(e) => setCep(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  placeholder="00000-000"
+                  maxLength={9}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  UF
+                </label>
+                <select
+                  value={uf}
+                  onChange={(e) => setUf(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {ESTADOS_BR.map(estado => (
+                    <option key={estado} value={estado}>{estado}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Cidade
+              </label>
+              <input
+                type="text"
+                value={cidade}
+                onChange={(e) => setCidade(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                placeholder="Ex: São Paulo"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Mensagem opcional */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sua mensagem para o locador
+              Mensagem adicional (opcional)
             </label>
             <textarea
               value={mensagem}
               onChange={(e) => setMensagem(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
-              rows={4}
-              required
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+              rows={3}
+              placeholder="Informações adicionais..."
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading || !mensagem.trim()}
-            className="w-full py-3 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 focus:ring-4 focus:ring-amber-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full py-4 bg-amber-600 text-white text-lg font-bold rounded-xl hover:bg-amber-700 focus:ring-4 focus:ring-amber-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
           >
-            {loading && <Loader2 className="w-5 h-5 animate-spin" />}
+            {loading && <Loader2 className="w-6 h-6 animate-spin" />}
             {loading ? 'Enviando...' : 'Enviar Solicitação'}
           </button>
         </form>
