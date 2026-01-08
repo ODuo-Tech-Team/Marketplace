@@ -85,16 +85,8 @@ export default function ChatsPage() {
                   className="block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-4"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      {equipamento?.fotos && equipamento.fotos.length > 0 ? (
-                        <img
-                          src={equipamento.fotos[0]}
-                          alt={equipamento.nome}
-                          className="w-full h-full object-cover rounded-lg"
-                        />
-                      ) : (
-                        <Package className="w-8 h-8 text-gray-300" />
-                      )}
+                    <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Package className="w-6 h-6 text-amber-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-800 truncate">

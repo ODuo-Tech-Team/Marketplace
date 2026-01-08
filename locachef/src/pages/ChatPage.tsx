@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, isChatAberto, ESTADOS_BR } from '../contexts/AppContext'
@@ -18,65 +18,138 @@ function PropostaModal({
   onEnviar,
   loading,
   equipamentoNome,
-  equipamentoPreco
+  equipamentoPreco,
+  quantidadeDias
 }: {
   isOpen: boolean
   onClose: () => void
-  onEnviar: () => Promise<void>
+  onEnviar: (dados: { valorDiaria: number; valorFrete: number }) => Promise<void>
   loading: boolean
   equipamentoNome?: string
   equipamentoPreco?: number
+  quantidadeDias?: number
 }) {
+  const [valorDiaria, setValorDiaria] = useState('')
+  const [valorFrete, setValorFrete] = useState('')
+
+  // Calcula o valor total
+  const valorDiariaNum = parseFloat(valorDiaria) || 0
+  const valorFreteNum = parseFloat(valorFrete) || 0
+  const diasNum = quantidadeDias || 0
+  const valorTotal = (valorDiariaNum * diasNum) + valorFreteNum
+
+  // Preenche o valor da diária sugerido automaticamente
+  React.useEffect(() => {
+    if (isOpen && equipamentoPreco && !valorDiaria) {
+      setValorDiaria(equipamentoPreco.toFixed(2))
+    }
+  }, [isOpen, equipamentoPreco])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await onEnviar({
+      valorDiaria: valorDiariaNum,
+      valorFrete: valorFreteNum
+    })
+    // Limpa campos após enviar
+    setValorDiaria('')
+    setValorFrete('')
+  }
+
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-xl font-semibold text-gray-800">Confirmar Interesse</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Gerar Proposta</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {/* Info do equipamento */}
-          <div className="bg-orange-50 p-5 rounded-xl border-2 border-orange-200">
-            <div className="flex items-center gap-3 mb-3">
-              <Package className="w-7 h-7 text-orange-600" />
+          <div className="bg-orange-50 p-4 rounded-xl border-2 border-orange-200">
+            <div className="flex items-center gap-3 mb-2">
+              <Package className="w-6 h-6 text-orange-600" />
               <span className="font-bold text-gray-800 text-lg">{equipamentoNome || 'Equipamento'}</span>
             </div>
-            {equipamentoPreco && (
-              <p className="text-2xl font-bold text-orange-600">
-                R$ {equipamentoPreco.toFixed(2)}/dia
+            {quantidadeDias && (
+              <p className="text-sm text-gray-600">
+                Período solicitado: <span className="font-bold">{quantidadeDias} dias</span>
               </p>
             )}
           </div>
 
-          {/* Explicação */}
-          <div className="text-base text-gray-600 space-y-2">
-            <p>Ao confirmar, o locador receberá seu interesse neste equipamento.</p>
-            <p className="font-medium text-gray-800">Você poderá combinar valores e prazos diretamente pelo chat.</p>
+          {/* Valor da Diária */}
+          <div>
+            <label className="block text-base font-bold text-gray-700 mb-2">
+              Valor da Diária (R$) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={valorDiaria}
+              onChange={(e) => setValorDiaria(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all"
+              placeholder="150.00"
+              required
+            />
+            {quantidadeDias && valorDiariaNum > 0 && (
+              <p className="mt-2 text-sm text-gray-600">
+                Subtotal ({quantidadeDias} dias): <span className="font-bold">R$ {(valorDiariaNum * quantidadeDias).toFixed(2)}</span>
+              </p>
+            )}
           </div>
+
+          {/* Valor do Frete */}
+          <div>
+            <label className="block text-base font-bold text-gray-700 mb-2">
+              Valor do Frete (R$) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={valorFrete}
+              onChange={(e) => setValorFrete(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all"
+              placeholder="50.00"
+              required
+            />
+          </div>
+
+          {/* Valor Total */}
+          {valorTotal > 0 && (
+            <div className="bg-green-50 p-4 rounded-xl border-2 border-green-300">
+              <p className="text-sm text-gray-600 mb-1">Valor Total da Proposta</p>
+              <p className="text-3xl font-bold text-green-600">
+                R$ {valorTotal.toFixed(2)}
+              </p>
+            </div>
+          )}
 
           {/* Botões */}
           <div className="flex gap-3">
             <button
+              type="button"
               onClick={onClose}
               className="flex-1 py-4 bg-gray-200 text-gray-700 text-lg font-bold rounded-xl hover:bg-gray-300 transition-all"
             >
               Cancelar
             </button>
             <button
-              onClick={onEnviar}
-              disabled={loading}
-              className="flex-1 py-4 bg-orange-600 text-white text-lg font-bold rounded-xl hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              type="submit"
+              disabled={loading || !valorDiaria || !valorFrete}
+              className="flex-1 py-4 bg-orange-600 text-white text-lg font-bold rounded-xl hover:bg-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Check className="w-6 h-6" />}
-              <span>{loading ? 'Enviando...' : 'Confirmar'}</span>
+              <span>{loading ? 'Enviando...' : 'Enviar Proposta'}</span>
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   )
@@ -463,6 +536,7 @@ export default function ChatPage() {
   const [enviandoProposta, setEnviandoProposta] = useState(false)
   const [respondendoProposta, setRespondendoProposta] = useState(false)
   const [marcandoEntregue, setMarcandoEntregue] = useState(false)
+  const [apagandoProposta, setApagandoProposta] = useState(false)
   const [erro, setErro] = useState<string | null>(null) // Estado de erro visual
   const [sucesso, setSucesso] = useState<string | null>(null) // Estado de sucesso visual
   // Estados para modal de endereço
@@ -703,7 +777,7 @@ export default function ChatPage() {
 
   // ESTRUTURA REAL DO BANCO: propostas só tem equipamento_id
   // O equipamento_id vem do chat atual (chat.proposta.equipamento_id ou chat.equipamento?.id)
-  const handleEnviarProposta = async () => {
+  const handleEnviarProposta = async (dados: { valorDiaria: number; valorFrete: number }) => {
     if (!chatId || !user || !chat) return
     setEnviandoProposta(true)
 
@@ -715,7 +789,17 @@ export default function ChatPage() {
       return
     }
 
-    const result = await enviarProposta(chatId, user.id, { equipamento_id: equipamentoId })
+    // Calcula o valor total
+    const quantidadeDias = chat.quantidade_dias || 0
+    const valorTotal = (dados.valorDiaria * quantidadeDias) + dados.valorFrete
+
+    const result = await enviarProposta(chatId, user.id, {
+      equipamento_id: equipamentoId,
+      valor_diaria: dados.valorDiaria,
+      quantidade_dias: quantidadeDias,
+      valor_frete: dados.valorFrete,
+      valor_total: valorTotal
+    })
 
     if (result.success) {
       // Delay para permitir que o React processe a remoção do loader
@@ -837,6 +921,55 @@ export default function ChatPage() {
     }
   }
 
+  // Handler para apagar proposta (LOCADOR)
+  const handleApagarProposta = async (propostaId: string) => {
+    if (!chatId || !user || !mountedRef.current) return
+
+    // Confirmação antes de apagar
+    const confirmar = window.confirm(
+      'Tem certeza que deseja cancelar esta proposta? Você poderá criar uma nova proposta depois.'
+    )
+    if (!confirmar) return
+
+    setErro(null)
+    setApagandoProposta(true)
+
+    try {
+      // Deleta a proposta do banco
+      const { error } = await supabase
+        .from('propostas')
+        .delete()
+        .eq('id', propostaId)
+
+      if (!mountedRef.current) return
+
+      setApagandoProposta(false)
+
+      if (error) {
+        console.error('[handleApagarProposta] Erro ao apagar:', error.message)
+        mostrarErro(`Erro ao cancelar proposta: ${error.message}`)
+        return
+      }
+
+      // Remove proposta_id do chat
+      await supabase
+        .from('chats')
+        .update({ proposta_id: null })
+        .eq('id', chatId)
+
+      // Recarrega dados
+      await carregarChat()
+      await carregarMensagens()
+      mostrarSucesso('✅ Proposta cancelada! Você pode criar uma nova proposta.')
+    } catch (err) {
+      console.error('[handleApagarProposta] Erro:', err)
+      if (mountedRef.current) {
+        setApagandoProposta(false)
+        mostrarErro('Erro inesperado ao cancelar proposta. Tente novamente.')
+      }
+    }
+  }
+
   // Handler para locador marcar como entregue
   const handleMarcarComoEntregue = async () => {
     if (!chat?.proposta?.id || !chat?.equipamento?.id || !user) return
@@ -922,6 +1055,13 @@ export default function ChatPage() {
   console.log('📊 STATUS:', statusProposta || '❌ SEM PROPOSTA')
   console.log('🏠 ENDEREÇO:', temEndereco ? '✅ Sim' : '❌ Não')
   console.log('💾 Proposta:', chat?.proposta)
+  console.log('📅 DADOS DA SOLICITAÇÃO:', {
+    quantidade_dias: chat?.quantidade_dias,
+    endereco_logradouro: chat?.endereco_entrega_logradouro,
+    endereco_cep: chat?.endereco_entrega_cep,
+    endereco_cidade: chat?.endereco_entrega_cidade,
+    endereco_uf: chat?.endereco_entrega_uf
+  })
   console.log('═══════════════════════════════════════════════════════')
 
   // BOTÃO 1: Gerar Proposta (LOCADOR)
@@ -1089,6 +1229,177 @@ export default function ChatPage() {
       {/* Messages */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-4">
+          {/* Card com dados da solicitação - visível para LOCADOR e LOCATÁRIO */}
+          {chat.quantidade_dias && (
+            <div className={`mb-6 bg-gradient-to-br ${isLocador ? 'from-amber-50 to-orange-50 border-amber-300' : 'from-blue-50 to-indigo-50 border-blue-300'} border-2 rounded-2xl p-6 shadow-lg`}>
+              <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText className={`w-6 h-6 ${isLocador ? 'text-amber-600' : 'text-blue-600'}`} />
+                {isLocador ? 'Dados da Solicitação do Cliente' : 'Sua Solicitação'}
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 ${isLocador ? 'bg-amber-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                    <span className="text-2xl">📅</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-600">Período solicitado</p>
+                    <p className="text-lg font-bold text-gray-800">{chat.quantidade_dias} dias</p>
+                  </div>
+                </div>
+
+                {chat.endereco_entrega_logradouro && (
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 ${isLocador ? 'bg-amber-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                      <MapPin className={`w-5 h-5 ${isLocador ? 'text-amber-600' : 'text-blue-600'}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-600">Local de Entrega</p>
+                      <p className="text-base font-medium text-gray-800">{chat.endereco_entrega_logradouro}</p>
+                      <p className="text-sm text-gray-600">
+                        CEP: {chat.endereco_entrega_cep} - {chat.endereco_entrega_cidade}/{chat.endereco_entrega_uf}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info adicional para locatário */}
+                {!isLocador && !chat.proposta && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      ⏳ Aguardando o locador enviar uma proposta com valores...
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Card com proposta enviada - visível para LOCADOR com opção de apagar */}
+          {isLocador && chat.proposta && chat.proposta.status === 'pendente' && chat.proposta.valor_total && (
+            <div className="mb-6 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 rounded-2xl p-6 shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <FileText className="w-6 h-6 text-blue-600" />
+                  Proposta Enviada
+                </h3>
+                <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-sm font-bold rounded-full">
+                  Aguardando resposta
+                </span>
+              </div>
+              <div className="space-y-4">
+                {/* Valores */}
+                <div className="bg-white rounded-xl p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Valor da Diária</span>
+                    <span className="text-base font-bold text-gray-800">
+                      R$ {chat.proposta.valor_diaria?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Quantidade de Dias</span>
+                    <span className="text-base font-bold text-gray-800">
+                      {chat.proposta.quantidade_dias || 0} dias
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Valor do Frete</span>
+                    <span className="text-base font-bold text-gray-800">
+                      R$ {chat.proposta.valor_frete?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                  <div className="h-px bg-gray-200 my-2"></div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-base font-bold text-gray-700">Valor Total</span>
+                    <span className="text-2xl font-bold text-blue-600">
+                      R$ {chat.proposta.valor_total?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Botão de Apagar Proposta */}
+                <button
+                  onClick={() => handleApagarProposta(chat.proposta!.id)}
+                  disabled={apagandoProposta}
+                  className="w-full py-3 bg-red-100 text-red-700 text-base font-bold rounded-xl hover:bg-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {apagandoProposta ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <X className="w-5 h-5" />
+                  )}
+                  {apagandoProposta ? 'Apagando...' : 'Cancelar Proposta'}
+                </button>
+                <p className="text-xs text-gray-500 text-center">
+                  Você pode cancelar esta proposta e criar uma nova com valores diferentes
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Card com proposta recebida - visível para LOCATÁRIO (cliente) */}
+          {!isLocador && chat.proposta && chat.proposta.status === 'pendente' && chat.proposta.valor_total && (
+            <div className="mb-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 rounded-2xl p-6 shadow-lg">
+              <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText className="w-6 h-6 text-green-600" />
+                Proposta Recebida
+              </h3>
+              <div className="space-y-4">
+                {/* Valores */}
+                <div className="bg-white rounded-xl p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Valor da Diária</span>
+                    <span className="text-base font-bold text-gray-800">
+                      R$ {chat.proposta.valor_diaria?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Quantidade de Dias</span>
+                    <span className="text-base font-bold text-gray-800">
+                      {chat.proposta.quantidade_dias || 0} dias
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Valor do Frete</span>
+                    <span className="text-base font-bold text-gray-800">
+                      R$ {chat.proposta.valor_frete?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                  <div className="h-px bg-gray-200 my-2"></div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-base font-bold text-gray-700">Valor Total</span>
+                    <span className="text-2xl font-bold text-green-600">
+                      R$ {chat.proposta.valor_total?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Botões de Aceitar/Recusar */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleRecusarProposta(chat.proposta!.id)}
+                    disabled={respondendoProposta}
+                    className="flex-1 py-4 bg-red-100 text-red-700 text-lg font-bold rounded-xl hover:bg-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <X className="w-6 h-6" />
+                    Recusar
+                  </button>
+                  <button
+                    onClick={() => handleAceitarProposta(chat.proposta!.id)}
+                    disabled={respondendoProposta}
+                    className="flex-1 py-4 bg-green-600 text-white text-lg font-bold rounded-xl hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {respondendoProposta ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <Check className="w-6 h-6" />
+                    )}
+                    Aceitar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {mensagens.length === 0 ? (
             <div className="text-center py-16 text-gray-500">
               Nenhuma mensagem ainda. Inicie a conversa!
@@ -1205,6 +1516,7 @@ export default function ChatPage() {
         loading={enviandoProposta}
         equipamentoNome={chat?.equipamento?.nome}
         equipamentoPreco={chat?.equipamento?.preco_diaria}
+        quantidadeDias={chat?.quantidade_dias}
       />
 
       <EnderecoModal

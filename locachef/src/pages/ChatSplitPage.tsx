@@ -19,74 +19,187 @@ function getImageUrl(path: string | null | undefined): string | null {
   return data?.publicUrl || null
 }
 
-// Modal para criar proposta (UX 35+)
-// ESTRUTURA REAL DO BANCO: propostas só tem equipamento_id, usuario_id, status
-// NÃO TEM: valor_diaria, quantidade_dias, valor_frete, valor_total
+// Modal profissional para LOCADOR criar proposta com valores
 function PropostaModal({
   isOpen,
   onClose,
   onEnviar,
   loading,
   equipamentoNome,
-  equipamentoPreco
+  equipamentoPreco,
+  quantidadeDiasSolicitados,
+  enderecoEntrega
 }: {
   isOpen: boolean
   onClose: () => void
-  onEnviar: () => Promise<void>
+  onEnviar: (dados: { valorDiaria: number; quantidadeDias: number; valorFrete: number; valorTotal: number }) => Promise<void>
   loading: boolean
   equipamentoNome?: string
   equipamentoPreco?: number
+  quantidadeDiasSolicitados?: number
+  enderecoEntrega?: { logradouro?: string; cidade?: string; uf?: string; cep?: string }
 }) {
+  const [valorDiaria, setValorDiaria] = useState(equipamentoPreco?.toString() || '')
+  const [quantidadeDias, setQuantidadeDias] = useState(quantidadeDiasSolicitados?.toString() || '')
+  const [valorFrete, setValorFrete] = useState('')
+
+  // Atualiza valores quando props mudam
+  useEffect(() => {
+    if (equipamentoPreco) setValorDiaria(equipamentoPreco.toString())
+    if (quantidadeDiasSolicitados) setQuantidadeDias(quantidadeDiasSolicitados.toString())
+  }, [equipamentoPreco, quantidadeDiasSolicitados])
+
+  // Calcula valor total automaticamente
+  const valorDiariaNum = parseFloat(valorDiaria) || 0
+  const quantidadeDiasNum = parseInt(quantidadeDias) || 0
+  const valorFreteNum = parseFloat(valorFrete) || 0
+  const subtotalLocacao = valorDiariaNum * quantidadeDiasNum
+  const valorTotal = subtotalLocacao + valorFreteNum
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (valorDiariaNum <= 0 || quantidadeDiasNum <= 0) {
+      alert('Preencha o valor da diária e quantidade de dias!')
+      return
+    }
+    await onEnviar({
+      valorDiaria: valorDiariaNum,
+      quantidadeDias: quantidadeDiasNum,
+      valorFrete: valorFreteNum,
+      valorTotal
+    })
+  }
+
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-xl font-semibold text-gray-800">Confirmar Interesse</h2>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <FileText className="w-6 h-6 text-orange-600" />
+            Gerar Proposta
+          </h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {/* Info do equipamento */}
-          <div className="bg-orange-50 p-5 rounded-xl border-2 border-orange-200">
-            <div className="flex items-center gap-3 mb-3">
-              <Package className="w-7 h-7 text-orange-600" />
-              <span className="font-bold text-gray-800 text-lg">{equipamentoNome || 'Equipamento'}</span>
+          <div className="bg-orange-50 p-4 rounded-xl border-2 border-orange-200">
+            <div className="flex items-center gap-3">
+              <Package className="w-6 h-6 text-orange-600" />
+              <span className="font-bold text-gray-800">{equipamentoNome || 'Equipamento'}</span>
             </div>
-            {equipamentoPreco && (
-              <p className="text-2xl font-bold text-orange-600">
-                R$ {equipamentoPreco.toFixed(2)}/dia
-              </p>
-            )}
           </div>
 
-          {/* Explicação */}
-          <div className="text-base text-gray-600 space-y-2">
-            <p>Ao confirmar, o locador receberá seu interesse neste equipamento.</p>
-            <p className="font-medium text-gray-800">Você poderá combinar valores e prazos diretamente pelo chat.</p>
+          {/* Dados da solicitação do cliente */}
+          {(quantidadeDiasSolicitados || enderecoEntrega?.logradouro) && (
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+              <p className="text-sm font-semibold text-blue-800 mb-2">Solicitação do Cliente:</p>
+              {quantidadeDiasSolicitados && (
+                <p className="text-sm text-blue-700">📅 Período: <span className="font-bold">{quantidadeDiasSolicitados} dias</span></p>
+              )}
+              {enderecoEntrega?.logradouro && (
+                <p className="text-sm text-blue-700 mt-1">
+                  📍 Entrega: {enderecoEntrega.logradouro}, {enderecoEntrega.cidade}/{enderecoEntrega.uf}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Campo: Valor da Diária */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Valor da Diária (R$) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={valorDiaria}
+              onChange={(e) => setValorDiaria(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+              placeholder="Ex: 150.00"
+              required
+            />
+          </div>
+
+          {/* Campo: Quantidade de Dias */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Quantidade de Dias *
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={quantidadeDias}
+              onChange={(e) => setQuantidadeDias(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+              placeholder="Ex: 3"
+              required
+            />
+          </div>
+
+          {/* Campo: Valor do Frete */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Valor do Frete (R$)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={valorFrete}
+              onChange={(e) => setValorFrete(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+              placeholder="Ex: 50.00 (opcional)"
+            />
+          </div>
+
+          {/* Resumo do Valor */}
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-5 rounded-xl border-2 border-green-300">
+            <h3 className="text-sm font-bold text-gray-600 mb-3">RESUMO DA PROPOSTA</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Locação ({quantidadeDiasNum} dias x R$ {valorDiariaNum.toFixed(2)})</span>
+                <span className="font-semibold">R$ {subtotalLocacao.toFixed(2)}</span>
+              </div>
+              {valorFreteNum > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Frete</span>
+                  <span className="font-semibold">R$ {valorFreteNum.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="border-t border-green-300 pt-2 mt-2">
+                <div className="flex justify-between">
+                  <span className="text-lg font-bold text-gray-800">TOTAL</span>
+                  <span className="text-2xl font-bold text-green-600">R$ {valorTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Botões */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-2">
             <button
+              type="button"
               onClick={onClose}
               className="flex-1 py-4 bg-gray-200 text-gray-700 text-lg font-bold rounded-xl hover:bg-gray-300 transition-all"
             >
               Cancelar
             </button>
             <button
-              onClick={onEnviar}
-              disabled={loading}
+              type="submit"
+              disabled={loading || valorTotal <= 0}
               className="flex-1 py-4 bg-orange-600 text-white text-lg font-bold rounded-xl hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Check className="w-6 h-6" />}
-              <span>{loading ? 'Enviando...' : 'Confirmar'}</span>
+              {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+              <span>{loading ? 'Enviando...' : 'Enviar Proposta'}</span>
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   )
@@ -488,9 +601,6 @@ function ChatList({
       {chats.map((chat) => {
         const isSelected = chat.id === selectedChatId
         const isLocador = chat.locador_id === userId
-        // Usa fotos[0] ou imagem_url
-        const imagemUrl = chat.equipamento?.fotos?.[0]
-        const imagemExibir = getImageUrl(imagemUrl)
 
         return (
           <button
@@ -500,14 +610,8 @@ function ChatList({
               isSelected ? 'bg-amber-50 border-l-4 border-amber-600' : ''
             }`}
           >
-            <div className="w-14 h-14 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
-              {imagemExibir ? (
-                <img src={imagemExibir} alt={chat.equipamento?.nome} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-6 h-6 text-gray-300" />
-                </div>
-              )}
+            <div className="w-12 h-12 bg-amber-100 rounded-lg flex-shrink-0 flex items-center justify-center">
+              <Package className="w-6 h-6 text-amber-600" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-gray-800 truncate text-base">
@@ -720,9 +824,8 @@ export default function ChatSplitPage() {
     setEnviando(false)
   }
 
-  // ESTRUTURA REAL DO BANCO: propostas só tem equipamento_id
-  // O equipamento_id vem do chat atual (chat.proposta.equipamento_id ou chat.equipamento?.id)
-  const handleEnviarProposta = async () => {
+  // Envia proposta com valores do modal
+  const handleEnviarProposta = async (dados: { valorDiaria: number; quantidadeDias: number; valorFrete: number; valorTotal: number }) => {
     if (!chatId || !user || !chat) return
     setEnviandoProposta(true)
 
@@ -734,15 +837,23 @@ export default function ChatSplitPage() {
       return
     }
 
-    const result = await enviarProposta(chatId, user.id, { equipamento_id: equipamentoId })
+    const result = await enviarProposta(chatId, user.id, {
+      equipamento_id: equipamentoId,
+      valor_diaria: dados.valorDiaria,
+      quantidade_dias: dados.quantidadeDias,
+      valor_frete: dados.valorFrete,
+      valor_total: dados.valorTotal
+    })
+
     if (result.success) {
       await new Promise(resolve => setTimeout(resolve, 100))
       setEnviandoProposta(false)
       setModalPropostaOpen(false)
       await carregarMensagens(chatId)
       await carregarChat(chatId)
-      mostrarSucesso('Proposta enviada! Aguarde a resposta do cliente.')
+      mostrarSucesso(`Proposta de R$ ${dados.valorTotal.toFixed(2)} enviada! Aguarde a resposta do cliente.`)
     } else {
+      mostrarErro(result.error || 'Erro ao enviar proposta')
       setEnviandoProposta(false)
     }
   }
@@ -927,18 +1038,8 @@ export default function ChatSplitPage() {
               {/* Header do chat */}
               <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden">
-                    {chat.equipamento?.fotos?.[0] ? (
-                      <img
-                        src={getImageUrl(chat.equipamento?.fotos?.[0]) || ''}
-                        alt={chat.equipamento?.nome}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-5 h-5 text-gray-300" />
-                      </div>
-                    )}
+                  <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <Package className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
                     <h2 className="font-semibold text-gray-800">{chat.equipamento?.nome || 'Conversa'}</h2>
@@ -977,6 +1078,58 @@ export default function ChatSplitPage() {
                   <XCircle className="w-5 h-5 text-red-500" />
                   <span className="text-sm">{erro}</span>
                   <button onClick={() => setErro(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+                </div>
+              )}
+
+              {/* Card com dados da solicitação - visível para LOCADOR e LOCATÁRIO */}
+              {chat.quantidade_dias && (
+                <div className={`mx-4 mt-4 bg-gradient-to-br ${isLocador ? 'from-amber-50 to-orange-50 border-amber-300' : 'from-blue-50 to-indigo-50 border-blue-300'} border-2 rounded-xl p-4 shadow-md`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                      <FileText className={`w-5 h-5 ${isLocador ? 'text-amber-600' : 'text-blue-600'}`} />
+                      {isLocador ? 'Dados da Solicitação do Cliente' : 'Sua Solicitação'}
+                    </h3>
+                    {/* Botão Gerar Proposta - só para locador */}
+                    {isLocador && podeGerarProposta && (
+                      <button
+                        onClick={() => setModalPropostaOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-sm font-bold rounded-lg hover:bg-orange-700 transition-all shadow-md"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Gerar Proposta
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📅</span>
+                      <div>
+                        <span className="text-sm text-gray-600">Período: </span>
+                        <span className="font-bold text-gray-800">{chat.quantidade_dias} dias</span>
+                      </div>
+                    </div>
+
+                    {chat.endereco_entrega_logradouro && (
+                      <div className="flex items-start gap-2">
+                        <MapPin className={`w-4 h-4 mt-0.5 ${isLocador ? 'text-amber-600' : 'text-blue-600'}`} />
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{chat.endereco_entrega_logradouro}</p>
+                          <p className="text-xs text-gray-600">
+                            CEP: {chat.endereco_entrega_cep} - {chat.endereco_entrega_cidade}/{chat.endereco_entrega_uf}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Info adicional para locatário */}
+                    {!isLocador && !chat.proposta && (
+                      <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-xs text-yellow-800">
+                          ⏳ Aguardando o locador enviar uma proposta com valores...
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1054,6 +1207,13 @@ export default function ChatSplitPage() {
         loading={enviandoProposta}
         equipamentoNome={chat?.equipamento?.nome}
         equipamentoPreco={chat?.equipamento?.preco_diaria}
+        quantidadeDiasSolicitados={chat?.quantidade_dias}
+        enderecoEntrega={{
+          logradouro: chat?.endereco_entrega_logradouro,
+          cidade: chat?.endereco_entrega_cidade,
+          uf: chat?.endereco_entrega_uf,
+          cep: chat?.endereco_entrega_cep
+        }}
       />
 
       <EnderecoModal

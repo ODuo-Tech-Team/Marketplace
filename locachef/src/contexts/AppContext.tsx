@@ -73,13 +73,20 @@ export const ESTADOS_BR = [
   'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ] as const
 
-// RAIO-X: chats tem proposta_id, locatario_id, locador_id (NÃO tem equipamento_id, status)
+// ESTRUTURA REAL DO BANCO - chats
 export interface Chat {
   id: string
-  proposta_id: string  // FK para propostas
+  equipamento_id: string  // FK para equipamentos
+  proposta_id?: string | null  // FK para propostas (opcional, criado depois)
   locador_id: string
   locatario_id: string
   created_at: string
+  // Dados da solicitação (salvos quando cliente solicita)
+  quantidade_dias?: number
+  endereco_entrega_logradouro?: string
+  endereco_entrega_cep?: string
+  endereco_entrega_cidade?: string
+  endereco_entrega_uf?: string
   // Dados carregados via join
   proposta?: Proposta
   equipamento?: Equipamento
@@ -103,6 +110,11 @@ export interface Proposta {
   usuario_id: string  // ID do locatário que fez a proposta
   status: string      // 'pendente' | 'aceita' | 'recusada' etc
   created_at: string
+  // Dados da proposta (valor e frete)
+  valor_diaria?: number | null
+  quantidade_dias?: number | null
+  valor_frete?: number | null
+  valor_total?: number | null
   // Endereço de entrega - RAIO-X confirma estes campos
   endereco_cep?: string | null
   endereco_logradouro?: string | null
@@ -121,6 +133,10 @@ export interface EnderecoEntrega {
 // Nova proposta - banco só tem equipamento_id e usuario_id
 export interface NovaProposta {
   equipamento_id: string
+  valor_diaria?: number
+  quantidade_dias?: number
+  valor_frete?: number
+  valor_total?: number
 }
 
 // Interface para entregas pendentes (propostas aceitas)
@@ -177,7 +193,21 @@ interface AppContextType {
   refetchEquipamentos: () => Promise<void>
   addEquipamento: (dados: NovoEquipamento, locadorId: string) => Promise<{ success: boolean; error?: string }>
   fetchMeusEquipamentos: (locadorId: string) => Promise<Equipamento[]>
-  iniciarChat: (equipamentoId: string, locadorId: string, locatarioId: string, mensagemInicial: string) => Promise<{ success: boolean; chatId?: string; error?: string }>
+  iniciarChat: (
+    equipamentoId: string,
+    locadorId: string,
+    locatarioId: string,
+    mensagemInicial: string,
+    dadosSolicitacao?: {
+      quantidadeDias: number
+      endereco: {
+        logradouro: string
+        cep: string
+        cidade: string
+        uf: string
+      }
+    }
+  ) => Promise<{ success: boolean; chatId?: string; error?: string }>
   enviarMensagem: (chatId: string, senderId: string, texto: string) => Promise<{ success: boolean; error?: string }>
   fetchMensagens: (chatId: string) => Promise<Mensagem[]>
   fetchMeusChats: (userId: string) => Promise<Chat[]>
@@ -421,15 +451,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
 
         // Busca o equipamento separadamente
+        let eqData = null
         if (chatData.equipamento_id) {
-          const { data: eqData } = await supabase
+          const { data: eq } = await supabase
             .from('equipamentos')
             .select('*')
             .eq('id', chatData.equipamento_id)
             .single()
+          eqData = eq
+        }
 
-          // Busca também a proposta
-          const { data: propostaData } = await supabase
+        // Busca a proposta - prioriza proposta_id se existir
+        let propostaData = null
+        if (chatData.proposta_id) {
+          const { data: prop } = await supabase
+            .from('propostas')
+            .select('*')
+            .eq('id', chatData.proposta_id)
+            .single()
+          propostaData = prop
+        } else if (chatData.equipamento_id) {
+          // Fallback: busca por equipamento_id e locatario_id
+          const { data: prop } = await supabase
             .from('propostas')
             .select('*')
             .eq('equipamento_id', chatData.equipamento_id)
@@ -437,27 +480,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
-
-          return { ...chatData, equipamento: eqData, proposta: propostaData || undefined } as Chat
+          propostaData = prop
         }
 
-        return chatData as Chat
+        return { ...chatData, equipamento: eqData, proposta: propostaData || undefined } as Chat
       }
 
       if (!data) {
         return null
       }
 
-      // Busca a proposta relacionada ao chat (se existir)
-      // Propostas têm equipamento_id e usuario_id (locatário)
-      const { data: propostaData } = await supabase
-        .from('propostas')
-        .select('*')
-        .eq('equipamento_id', data.equipamento_id)
-        .eq('usuario_id', data.locatario_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      // Busca a proposta - prioriza proposta_id se existir no chat
+      let propostaData = null
+      if (data.proposta_id) {
+        // Busca direta por proposta_id (mais confiável)
+        const { data: prop } = await supabase
+          .from('propostas')
+          .select('*')
+          .eq('id', data.proposta_id)
+          .single()
+        propostaData = prop
+      } else if (data.equipamento_id) {
+        // Fallback: busca por equipamento_id e locatario_id
+        const { data: prop } = await supabase
+          .from('propostas')
+          .select('*')
+          .eq('equipamento_id', data.equipamento_id)
+          .eq('usuario_id', data.locatario_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        propostaData = prop
+      }
 
       // Adiciona a proposta ao chat se encontrou
       const chatComProposta = {
@@ -471,6 +525,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.log('Chat ID:', chatId)
       console.log('Equipamento ID:', data.equipamento_id)
       console.log('Locatário ID:', data.locatario_id)
+      console.log('Proposta ID (do chat):', data.proposta_id)
       console.log('Proposta encontrada?', !!propostaData)
       if (propostaData) {
         console.log('✅ PROPOSTA:', {
@@ -478,6 +533,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: propostaData.status,
           equipamento_id: propostaData.equipamento_id,
           usuario_id: propostaData.usuario_id,
+          valor_total: propostaData.valor_total,
           temEndereco: !!propostaData.endereco_logradouro
         })
       } else {
@@ -550,7 +606,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     equipamentoId: string,
     locadorId: string,
     locatarioId: string,
-    mensagemInicial: string
+    mensagemInicial: string,
+    dadosSolicitacao?: {
+      quantidadeDias: number
+      endereco: {
+        logradouro: string
+        cep: string
+        cidade: string
+        uf: string
+      }
+    }
   ): Promise<{ success: boolean; chatId?: string; error?: string }> => {
     try {
       // Verifica se já existe um chat para este equipamento e locatário
@@ -567,14 +632,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: 'Erro ao verificar seu perfil. Tente fazer logout e login novamente.' }
       }
 
-      // Cria novo chat - ESTRUTURA REAL: só tem equipamento_id, locador_id, locatario_id
+      // Cria novo chat COM dados da solicitação
+      const chatInsert: any = {
+        equipamento_id: equipamentoId,
+        locador_id: locadorId,
+        locatario_id: locatarioId
+      }
+
+      // Adiciona dados da solicitação se fornecidos
+      if (dadosSolicitacao) {
+        chatInsert.quantidade_dias = dadosSolicitacao.quantidadeDias
+        chatInsert.endereco_entrega_logradouro = dadosSolicitacao.endereco.logradouro
+        chatInsert.endereco_entrega_cep = dadosSolicitacao.endereco.cep
+        chatInsert.endereco_entrega_cidade = dadosSolicitacao.endereco.cidade
+        chatInsert.endereco_entrega_uf = dadosSolicitacao.endereco.uf
+      }
+
       const { data: chatData, error: chatError } = await supabase
         .from('chats')
-        .insert({
-          equipamento_id: equipamentoId,
-          locador_id: locadorId,
-          locatario_id: locatarioId
-        })
+        .insert(chatInsert)
         .select('id')
         .single()
 
@@ -697,9 +773,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Envia uma proposta de locação
-  // ESTRUTURA REAL: propostas só tem equipamento_id, usuario_id, status
-  // NÃO TEM: valor_diaria, quantidade_dias, valor_frete, total, chat_id
+  // Envia uma proposta de locação (LOCADOR envia para LOCATÁRIO)
+  // usuario_id na proposta = locatario_id (quem vai aceitar/recusar)
   const enviarProposta = async (
     chatId: string,
     locadorId: string,
@@ -708,14 +783,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       console.log('[enviarProposta] Criando proposta com equipamento_id:', dados.equipamento_id)
 
-      // Cria a proposta com estrutura real do banco
+      // Busca o locatario_id do chat para vincular à proposta
+      const { data: chatData, error: chatFetchError } = await supabase
+        .from('chats')
+        .select('locatario_id')
+        .eq('id', chatId)
+        .single()
+
+      if (chatFetchError || !chatData?.locatario_id) {
+        console.error('[enviarProposta] Erro ao buscar chat:', chatFetchError?.message)
+        return { success: false, error: 'Chat não encontrado' }
+      }
+
+      // Cria a proposta - usuario_id é o LOCATÁRIO (quem recebe a proposta)
+      const propostaInsert: any = {
+        equipamento_id: dados.equipamento_id,
+        usuario_id: chatData.locatario_id,  // ID do LOCATÁRIO que vai aceitar/recusar
+        status: 'pendente'
+      }
+
+      // Adiciona campos opcionais se fornecidos
+      if (dados.valor_diaria !== undefined) propostaInsert.valor_diaria = dados.valor_diaria
+      if (dados.quantidade_dias !== undefined) propostaInsert.quantidade_dias = dados.quantidade_dias
+      if (dados.valor_frete !== undefined) propostaInsert.valor_frete = dados.valor_frete
+      if (dados.valor_total !== undefined) propostaInsert.valor_total = dados.valor_total
+
       const { data: propostaData, error: propostaError } = await supabase
         .from('propostas')
-        .insert({
-          equipamento_id: dados.equipamento_id,
-          usuario_id: locadorId,  // ID do locatário que está enviando a proposta
-          status: 'pendente'
-        })
+        .insert(propostaInsert)
         .select('id')
         .single()
 
@@ -747,7 +842,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .insert({
           chat_id: chatId,
           sender_id: locadorId,
-          texto: '📋 Proposta de locação enviada! Aguarde a resposta do locador.',
+          texto: '📋 Proposta de locação enviada! Aguarde a resposta do cliente.',
           lida: false
         })
 

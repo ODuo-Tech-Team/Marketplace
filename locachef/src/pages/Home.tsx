@@ -645,7 +645,16 @@ export default function Home() {
     setModalOpen(true)
   }
 
-  const handleEnviarSolicitacao = async (mensagem: string) => {
+  const handleEnviarSolicitacao = async (dados: {
+    mensagem: string
+    quantidadeDias: number
+    endereco: {
+      logradouro: string
+      cep: string
+      cidade: string
+      uf: string
+    }
+  }) => {
     if (!selectedEquipamento || !user) return
 
     setEnviando(true)
@@ -653,7 +662,11 @@ export default function Home() {
       selectedEquipamento.id,
       selectedEquipamento.locador_id,
       user.id,
-      mensagem
+      dados.mensagem,
+      {
+        quantidadeDias: dados.quantidadeDias,
+        endereco: dados.endereco
+      }
     )
 
     if (result.success && result.chatId) {
