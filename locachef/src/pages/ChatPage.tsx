@@ -724,7 +724,7 @@ export default function ChatPage() {
       setModalPropostaOpen(false)
       await carregarMensagens()
       await carregarChat()
-      mostrarSucesso('Proposta enviada! Aguarde a resposta do cliente.')
+      mostrarSucesso('✅ Proposta enviada com sucesso! Aguarde a resposta do cliente.')
     } else {
       setEnviandoProposta(false)
     }
@@ -756,8 +756,8 @@ export default function ChatPage() {
         setModalEnderecoOpen(false)
         setPropostaParaAceitar(null)
 
-        // Mostra feedback de sucesso para o cliente
-        mostrarSucesso('Proposta aceita! Seu endereço foi enviado ao locador.')
+        // Mostra feedback de sucesso - UX 35+
+        mostrarSucesso('✅ Endereço enviado com sucesso! Aguarde a confirmação de entrega do locador.')
 
         // Atualiza a proposta localmente
         // ESTRUTURA REAL: só tem endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf
@@ -847,8 +847,9 @@ export default function ChatPage() {
       const result = await marcarComoEntregue(chat.proposta.id, chat.equipamento.id)
 
       if (result.success) {
-        mostrarSucesso('Entrega confirmada! O equipamento foi marcado como entregue.')
+        mostrarSucesso('✅ Entrega confirmada com sucesso! O equipamento está agora em uso pelo cliente.')
         await carregarChat()
+        await carregarMensagens()
       } else {
         mostrarErro(`Erro ao confirmar entrega: ${result.error || 'Erro desconhecido'}`)
       }
@@ -903,26 +904,45 @@ export default function ChatPage() {
     return acc
   }, {} as Record<string, Mensagem[]>)
 
-  // Verifica se é locador
+  // ============================================
+  // LÓGICA DE BOTÕES - CORRIGIDA PELO SENIOR
+  // ============================================
+
+  // Define quem é quem
+  const isLocatario = !isLocador
+
+  // Status da proposta (pode ser undefined se não existe proposta ainda)
+  const statusProposta = chat?.proposta?.status
+  const temEndereco = !!chat?.proposta?.endereco_logradouro
+
   console.log('🔍 DEBUG CHAT STATE:', {
     userId,
     locadorId,
     locatarioId,
     isLocador,
-    isLocatario: !isLocador,
-    chat: chat?.id,
-    proposta: chat?.proposta?.id,
-    statusProposta: chat?.proposta?.status,
-    temEndereco: !!chat?.proposta?.endereco_logradouro
+    isLocatario,
+    statusProposta,
+    temEndereco,
+    proposta: chat?.proposta
   })
 
-  // Verifica se pode gerar proposta: só locador pode gerar e se não tem proposta aceita
-  const podeGerarProposta = isLocador && (!chat?.proposta || chat?.proposta?.status !== 'aceita')
+  // BOTÃO 1: Gerar Proposta (LOCADOR)
+  // Aparece quando: é locador E (não tem proposta OU proposta não está aceita)
+  const podeGerarProposta = isLocador && (!statusProposta || statusProposta !== 'aceita')
+
+  // BOTÃO 2: Enviar Endereço (LOCATÁRIO) - CORREÇÃO CRÍTICA
+  // Aparece quando: é locatário E proposta está pendente
+  // IMPORTANTE: Mesmo que statusProposta seja undefined, se existir chat.proposta, considera como pendente
+  const podeEnviarEndereco = isLocatario && (statusProposta === 'pendente' || (chat?.proposta && !statusProposta))
+
+  // BOTÃO 3: Confirmar Entrega (LOCADOR)
+  // Aparece quando: é locador E proposta aceita E tem endereço
+  const podeConfirmarEntrega = isLocador && statusProposta === 'aceita' && temEndereco
 
   console.log('✅ BOTÕES DISPONÍVEIS:', {
     podeGerarProposta,
-    podeEnviarEndereco: !isLocador && chat?.proposta?.status === 'pendente',
-    podeConfirmarEntrega: isLocador && chat?.proposta?.status === 'aceita' && !!chat?.proposta?.endereco_logradouro
+    podeEnviarEndereco,
+    podeConfirmarEntrega
   })
 
   // Tratamento de loading - wrapper com altura mínima para estabilidade do DOM
@@ -972,40 +992,48 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Botão Gerar Proposta - só para locador quando não tem proposta aceita */}
+          {/* ============================================ */}
+          {/* BOTÕES DE AÇÃO - UX 35+ OLX STYLE */}
+          {/* ============================================ */}
+
+          {/* BOTÃO 1: Gerar Proposta (LOCADOR) */}
           {podeGerarProposta && (
             <button
               onClick={() => setModalPropostaOpen(true)}
-              className="flex items-center gap-2 px-5 py-3 bg-orange-600 text-white text-base font-bold rounded-xl hover:bg-orange-700 transition-colors shadow-md"
+              className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white text-lg font-bold rounded-xl hover:bg-orange-700 transition-all shadow-lg hover:shadow-xl"
             >
-              <FileText className="w-5 h-5" />
+              <FileText className="w-6 h-6" />
               Gerar Proposta
             </button>
           )}
 
-          {/* Botão Enviar Endereço - só para locatário quando proposta está pendente */}
-          {!isLocador && chat?.proposta?.status === 'pendente' && (
+          {/* BOTÃO 2: Enviar Endereço (LOCATÁRIO) - DESTAQUE LARANJA OLX */}
+          {podeEnviarEndereco && (
             <button
               onClick={handleAceitarPropostaHeader}
               disabled={respondendoProposta}
-              className="flex items-center gap-2 px-5 py-3 bg-green-600 text-white text-base font-bold rounded-xl hover:bg-green-700 transition-colors shadow-md disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white text-lg font-bold rounded-xl hover:bg-orange-600 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <MapPin className="w-5 h-5" />
-              Enviar Endereço e Fechar
+              {respondendoProposta ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                <MapPin className="w-6 h-6" />
+              )}
+              {respondendoProposta ? 'Enviando...' : 'Enviar Endereço para Entrega'}
             </button>
           )}
 
-          {/* Botão Confirmar Entrega - só para locador quando proposta aceita e tem endereço */}
-          {isLocador && chat?.proposta?.status === 'aceita' && chat?.proposta?.endereco_logradouro && (
+          {/* BOTÃO 3: Confirmar Entrega (LOCADOR) */}
+          {podeConfirmarEntrega && (
             <button
               onClick={handleMarcarComoEntregue}
               disabled={marcandoEntregue}
-              className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white text-base font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white text-lg font-bold rounded-xl hover:bg-green-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {marcandoEntregue ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-6 h-6 animate-spin" />
               ) : (
-                <Truck className="w-5 h-5" />
+                <Truck className="w-6 h-6" />
               )}
               {marcandoEntregue ? 'Confirmando...' : 'Confirmar Entrega Realizada'}
             </button>
