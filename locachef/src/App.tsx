@@ -12,8 +12,11 @@ import ChatSplitPage from './pages/ChatSplitPage'
 import Adm from './pages/Adm'
 import AdminLogin from './pages/AdminLogin'
 
-// Email autorizado para acesso administrativo
-const ADMIN_EMAIL = 'maumaureis0404@gmail.com'
+// Emails autorizados para acesso administrativo
+const ADMIN_EMAILS = [
+  'mauricio.reis@oduo.com.br',
+  'maumaureis0404@gmail.com' // mantém o antigo como backup
+]
 
 function SplashScreen({ onForceEntry }: { onForceEntry: () => void }) {
   const [showFailsafe, setShowFailsafe] = useState(false)
@@ -66,8 +69,8 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
     return <AdminLogin />
   }
 
-  // Se está logado mas não é o email autorizado, redireciona para Home
-  if (user.email !== ADMIN_EMAIL) {
+  // Se está logado mas não é um email autorizado, redireciona para Home
+  if (!user.email || !ADMIN_EMAILS.includes(user.email)) {
     return <Navigate to="/" replace />
   }
 
