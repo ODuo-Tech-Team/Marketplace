@@ -205,8 +205,8 @@ function PropostaModal({
   )
 }
 
-// Modal de sucesso para locatário após enviar endereço - UX 35+
-function SucessoEnderecoModal({
+// Modal de sucesso para locatário após aceitar proposta - UX 35+
+function SucessoAceiteModal({
   isOpen,
   onClose
 }: {
@@ -227,12 +227,12 @@ function SucessoEnderecoModal({
 
         {/* Título */}
         <h2 className="text-3xl font-bold text-gray-800 mb-4">
-          Sucesso!
+          Proposta Aceita!
         </h2>
 
         {/* Mensagem */}
         <p className="text-xl text-gray-600 mb-6 leading-relaxed">
-          O seu endereço foi enviado. O locador irá preparar a entrega da máquina.
+          Sua locação foi confirmada! O locador irá preparar a entrega do equipamento.
         </p>
 
         {/* Info adicional */}
@@ -858,9 +858,53 @@ export default function ChatSplitPage() {
     }
   }
 
-  const handleAceitarProposta = (propostaId: string) => {
-    setPropostaParaAceitar(propostaId)
-    setModalEnderecoOpen(true)
+  // Aceita proposta diretamente (endereço já foi informado na solicitação)
+  const handleAceitarProposta = async (propostaId: string) => {
+    if (!chatId || !user || !mountedRef.current) return
+    setRespondendoProposta(true)
+
+    try {
+      // Usa o endereço que já foi informado na solicitação (salvo no chat)
+      const enderecoExistente = chat?.endereco_entrega_logradouro ? {
+        cep: chat.endereco_entrega_cep || '',
+        logradouro: chat.endereco_entrega_logradouro,
+        cidade: chat.endereco_entrega_cidade || '',
+        uf: chat.endereco_entrega_uf || ''
+      } : undefined
+
+      const result = await responderProposta(propostaId, chatId, true, user.id, enderecoExistente)
+      if (!mountedRef.current) return
+      setRespondendoProposta(false)
+
+      if (result.success) {
+        // Abre modal de sucesso
+        setModalSucessoEnderecoOpen(true)
+
+        // Atualiza a proposta localmente
+        setPropostas(prev => ({
+          ...prev,
+          [propostaId]: {
+            ...prev[propostaId],
+            status: 'aceita' as const,
+            endereco_cep: enderecoExistente?.cep,
+            endereco_logradouro: enderecoExistente?.logradouro,
+            endereco_cidade: enderecoExistente?.cidade,
+            endereco_uf: enderecoExistente?.uf
+          }
+        }))
+
+        await carregarChat(chatId)
+        mostrarSucesso('Proposta aceita com sucesso!')
+      } else {
+        mostrarErro(`Erro ao aceitar proposta: ${result.error || 'Erro desconhecido'}`)
+      }
+    } catch (err) {
+      console.error('[handleAceitarProposta] Erro:', err)
+      if (mountedRef.current) {
+        setRespondendoProposta(false)
+        mostrarErro('Erro inesperado ao processar proposta.')
+      }
+    }
   }
 
   const handleConfirmarEnderecoEAceitar = async (endereco: EnderecoEntrega) => {
@@ -952,7 +996,9 @@ export default function ChatSplitPage() {
     return acc
   }, {} as Record<string, Mensagem[]>)
 
-  const podeGerarProposta = isLocador && isChatAberto(statusDoChat)
+  // Locador pode gerar proposta se: não tem proposta OU proposta não está aceita
+  const statusProposta = chat?.proposta?.status
+  const podeGerarProposta = isLocador && (!statusProposta || statusProposta !== 'aceita')
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -1133,6 +1179,109 @@ export default function ChatSplitPage() {
                 </div>
               )}
 
+              {/* CARD DE PROPOSTA PARA CLIENTE - Aparece quando locador enviou proposta */}
+              {isLocatario && chat?.proposta && (
+                <div className="mx-4 mt-4">
+                  <div className={`bg-white rounded-xl shadow-lg border-2 ${
+                    chat.proposta.status === 'pendente' ? 'border-orange-300' :
+                    chat.proposta.status === 'aceita' ? 'border-green-300' : 'border-red-300'
+                  } p-5`}>
+                    {/* Header do card */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={`p-2 rounded-full ${
+                        chat.proposta.status === 'pendente' ? 'bg-orange-100' :
+                        chat.proposta.status === 'aceita' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        <FileText className={`w-6 h-6 ${
+                          chat.proposta.status === 'pendente' ? 'text-orange-600' :
+                          chat.proposta.status === 'aceita' ? 'text-green-600' : 'text-red-600'
+                        }`} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-gray-800 text-lg">Proposta de Locação</h3>
+                        <p className={`text-sm font-medium ${
+                          chat.proposta.status === 'pendente' ? 'text-orange-600' :
+                          chat.proposta.status === 'aceita' ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {chat.proposta.status === 'pendente' && '⏳ Aguardando sua resposta'}
+                          {chat.proposta.status === 'aceita' && '✅ Proposta aceita'}
+                          {chat.proposta.status === 'recusada' && '❌ Proposta recusada'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Detalhes da proposta */}
+                    <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Package className="w-5 h-5 text-amber-600" />
+                        <span className="font-semibold text-gray-800">{chat.equipamento?.nome || 'Equipamento'}</span>
+                      </div>
+
+                      {chat.proposta.valor_diaria && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Valor da diária:</span>
+                          <span className="font-semibold">R$ {chat.proposta.valor_diaria.toFixed(2)}</span>
+                        </div>
+                      )}
+
+                      {chat.proposta.quantidade_dias && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Quantidade de dias:</span>
+                          <span className="font-semibold">{chat.proposta.quantidade_dias} dias</span>
+                        </div>
+                      )}
+
+                      {chat.proposta.valor_frete && chat.proposta.valor_frete > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Frete:</span>
+                          <span className="font-semibold">R$ {chat.proposta.valor_frete.toFixed(2)}</span>
+                        </div>
+                      )}
+
+                      {chat.proposta.valor_total && (
+                        <div className="flex justify-between pt-2 border-t border-gray-200">
+                          <span className="font-bold text-gray-800">TOTAL:</span>
+                          <span className="font-bold text-xl text-green-600">R$ {chat.proposta.valor_total.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Botões de aceitar/recusar - só aparecem se pendente */}
+                    {chat.proposta.status === 'pendente' && (
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleRecusarProposta(chat.proposta!.id)}
+                          disabled={respondendoProposta}
+                          className="flex-1 flex items-center justify-center gap-2 py-4 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 disabled:opacity-50 text-base font-bold transition-all"
+                        >
+                          <XCircle className="w-5 h-5" />
+                          <span>Recusar</span>
+                        </button>
+                        <button
+                          onClick={() => handleAceitarProposta(chat.proposta!.id)}
+                          disabled={respondendoProposta}
+                          className="flex-1 flex items-center justify-center gap-2 py-4 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 text-base font-bold transition-all"
+                        >
+                          {respondendoProposta ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+                          <span>Aceitar</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Mensagem de sucesso quando aceita */}
+                    {chat.proposta.status === 'aceita' && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                        <PartyPopper className="w-6 h-6 text-green-600" />
+                        <div>
+                          <p className="font-semibold text-green-800">Proposta aceita com sucesso!</p>
+                          <p className="text-sm text-green-700">O locador irá preparar a entrega do equipamento.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Mensagens */}
               <div className="flex-1 overflow-y-auto px-4 py-4">
                 {mensagens.length === 0 ? (
@@ -1223,7 +1372,7 @@ export default function ChatSplitPage() {
         loading={respondendoProposta}
       />
 
-      <SucessoEnderecoModal
+      <SucessoAceiteModal
         isOpen={modalSucessoEnderecoOpen}
         onClose={() => setModalSucessoEnderecoOpen(false)}
       />

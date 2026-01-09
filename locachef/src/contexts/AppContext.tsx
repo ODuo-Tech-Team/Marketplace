@@ -9,12 +9,15 @@ export interface Equipamento {
   descricao: string | null
   preco_diaria: number
   fotos: string[] | null  // ARRAY no banco - única forma de imagem
-  status: string | null   // Campo real no banco (não 'disponivel')
+  status: string | null   // Campo real no banco (não 'disponivel') - 'DISPONIVEL', 'LOCADO', 'OCUPADO'
   categoria: string | null
   cidade: string | null
   uf: string | null
   locador_id: string
   created_at: string
+  // Campos de locação (preenchidos quando equipamento está locado)
+  locado_para?: string | null       // Nome do cliente que alugou
+  locado_para_id?: string | null    // ID do cliente que alugou
   // Dados do locador (carregados via join)
   locador_nome_empresa?: string | null
   locador_?: string | null
@@ -961,6 +964,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Se aceitou e tem endereço, salva o endereço na proposta
       if (aceitar && endereco) {
         await atualizarEnderecoNaProposta(propostaId, endereco)
+      }
+
+      // Se aceitou, marca o equipamento como LOCADO
+      if (aceitar && chatData?.equipamento_id) {
+        console.log('[responderProposta] Marcando equipamento como LOCADO:', chatData.equipamento_id)
+
+        // Busca o nome do locatário para salvar no equipamento
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name, nome_empresa, email')
+          .eq('id', userId)
+          .single()
+
+        const nomeCliente = profileData?.nome_empresa || profileData?.full_name || profileData?.email || 'Cliente'
+
+        const { error: equipamentoError } = await supabase
+          .from('equipamentos')
+          .update({
+            status: 'LOCADO',
+            locado_para: nomeCliente,
+            locado_para_id: userId
+          })
+          .eq('id', chatData.equipamento_id)
+
+        if (equipamentoError) {
+          console.warn('[responderProposta] Erro ao marcar equipamento como LOCADO:', equipamentoError.message)
+          // Não retorna erro pois a proposta já foi aceita
+        } else {
+          console.log('[responderProposta] Equipamento marcado como LOCADO para:', nomeCliente)
+          // Atualiza lista de equipamentos para remover da Home
+          await fetchEquipamentos()
+        }
       }
 
       console.log('[responderProposta] Sucesso:', response?.message || 'Proposta processada')

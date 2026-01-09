@@ -612,6 +612,7 @@ function EquipamentoCard({
   }).format(equipamento.preco_diaria)
 
   const isDisponivel = isEquipamentoDisponivel(equipamento)
+  const isLocado = equipamento.status === 'LOCADO' || equipamento.status === 'locado'
 
   // Prioriza fotos[0] sobre imagem_url
   const imagemExibir = (equipamento.fotos && equipamento.fotos.length > 0)
@@ -632,21 +633,28 @@ function EquipamentoCard({
             <Package className="w-16 h-16 text-gray-300" />
           </div>
         )}
-        <div className="absolute top-3 left-3 flex gap-2">
+        <div className="absolute top-3 left-3 flex flex-col gap-2">
           {equipamento.categoria && (
-            <span className={`px-2 py-1 ${CATEGORIA_CORES[equipamento.categoria] || 'bg-gray-600'} text-white text-xs font-medium rounded-full`}>
+            <span className={`px-2 py-1 ${CATEGORIA_CORES[equipamento.categoria] || 'bg-gray-600'} text-white text-xs font-medium rounded-full w-fit`}>
               {equipamento.categoria}
             </span>
           )}
-          <span
-            className={`px-3 py-1.5 text-sm font-bold rounded-full uppercase ${
-              isDisponivel
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-600 text-white'
-            }`}
-          >
-            {isDisponivel ? 'Disponível' : 'Indisponível'}
-          </span>
+          {/* Badge de status: LOCADO tem destaque especial */}
+          {isLocado ? (
+            <span className="px-3 py-1.5 text-sm font-bold rounded-full bg-orange-600 text-white shadow-lg">
+              LOCADO
+            </span>
+          ) : (
+            <span
+              className={`px-3 py-1.5 text-sm font-bold rounded-full uppercase ${
+                isDisponivel
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-600 text-white'
+              }`}
+            >
+              {isDisponivel ? 'Disponível' : 'Indisponível'}
+            </span>
+          )}
         </div>
 
         {/* Botões de Editar e Deletar */}
@@ -729,6 +737,19 @@ function EquipamentoCard({
           <p className="text-gray-400 text-xs line-clamp-1 italic">
             {equipamento.descricao}
           </p>
+        )}
+
+        {/* Mostra nome do cliente quando equipamento está LOCADO */}
+        {isLocado && equipamento.locado_para && (
+          <div className="mt-3 p-3 bg-orange-50 border-2 border-orange-200 rounded-xl">
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5 text-orange-600" />
+              <div>
+                <p className="text-xs text-orange-600 font-semibold uppercase">Locado para</p>
+                <p className="text-sm font-bold text-gray-800">{equipamento.locado_para}</p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
