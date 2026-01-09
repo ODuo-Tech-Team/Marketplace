@@ -148,8 +148,9 @@ function SolicitarModal({
   const [cidade, setCidade] = useState('')
   const [uf, setUf] = useState('')
 
+  // Atualiza mensagem quando modal abre com equipamento
   useEffect(() => {
-    if (equipamento?.nome) {
+    if (isOpen && equipamento?.nome) {
       setMensagem(
         `Olá! Tenho interesse em alugar o equipamento "${equipamento.nome}". Podemos conversar sobre disponibilidade e condições?`
       )
@@ -160,7 +161,7 @@ function SolicitarModal({
       setCidade('')
       setUf('')
     }
-  }, [equipamento])
+  }, [isOpen, equipamento?.nome])
 
   if (!isOpen || !equipamento) return null
 
@@ -641,8 +642,12 @@ export default function Home() {
   }
 
   const handleSolicitar = (equipamento: Equipamento) => {
+    // Garante que o equipamento está selecionado antes de abrir o modal
     setSelectedEquipamento(equipamento)
-    setModalOpen(true)
+    // Usa setTimeout para garantir que o estado foi atualizado antes de abrir o modal
+    setTimeout(() => {
+      setModalOpen(true)
+    }, 0)
   }
 
   const handleEnviarSolicitacao = async (dados: {

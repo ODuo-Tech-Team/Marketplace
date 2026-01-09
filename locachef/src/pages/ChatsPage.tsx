@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, type Chat } from '../contexts/AppContext'
-import { HardHat, MessageCircle, Loader2, Package } from 'lucide-react'
+import { HardHat, MessageCircle, Loader2, Package, ArrowLeft } from 'lucide-react'
 
 export default function ChatsPage() {
   const { user, profile, signOut } = useAuth()
   const { fetchMeusChats } = useApp()
+  const navigate = useNavigate()
 
   const [chats, setChats] = useState<Chat[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,9 +49,18 @@ export default function ChatsPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-6">
-          Minhas Conversas
-        </h2>
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-white hover:shadow rounded-lg transition-all"
+            title="Voltar"
+          >
+            <ArrowLeft className="w-6 h-6 text-gray-600" />
+          </button>
+          <h2 className="text-3xl font-bold text-gray-800">
+            Minhas Conversas
+          </h2>
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -76,6 +86,9 @@ export default function ChatsPage() {
           <div className="space-y-3">
             {chats.map((chat) => {
               const equipamento = chat.equipamento
+              const isLocador = chat.locador_id === user?.id
+              // Nome da outra parte: se sou locador, mostro o locatário, e vice-versa
+              const outraParte = isLocador ? chat.locatario_nome : chat.locador_nome
               // Verifica se a última mensagem é não lida E foi enviada por outra pessoa
               const temMensagemNaoLida = chat.ultima_mensagem &&
                 !chat.ultima_mensagem_lida &&
@@ -86,7 +99,7 @@ export default function ChatsPage() {
                   key={chat.id}
                   to={`/chat/${chat.id}`}
                   className={`block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 ${
-                    temMensagemNaoLida ? 'border-l-4 border-amber-500' : ''
+                    temMensagemNaoLida ? 'border-l-4 border-amber-500 bg-orange-50' : ''
                   }`}
                 >
                   <div className="flex items-center gap-4">
@@ -95,8 +108,9 @@ export default function ChatsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
+                        {/* Nome da outra pessoa */}
                         <h3 className={`text-gray-800 truncate ${temMensagemNaoLida ? 'font-bold' : 'font-semibold'}`}>
-                          {equipamento?.nome || 'Equipamento'}
+                          {outraParte || 'Cliente'}
                         </h3>
                         {chat.ultima_mensagem_data && (
                           <span className="text-xs text-gray-400 flex-shrink-0">
@@ -104,15 +118,20 @@ export default function ChatsPage() {
                           </span>
                         )}
                       </div>
+                      {/* Nome do equipamento */}
+                      <p className="text-xs text-amber-600 font-medium truncate">
+                        {equipamento?.nome || 'Equipamento'}
+                      </p>
+                      {/* Última mensagem */}
                       {chat.ultima_mensagem ? (
-                        <p className={`text-sm truncate mt-1 ${
-                          temMensagemNaoLida ? 'text-gray-800 font-semibold' : 'text-gray-500'
+                        <p className={`text-sm truncate mt-0.5 ${
+                          temMensagemNaoLida ? 'text-gray-800 font-medium' : 'text-gray-500'
                         }`}>
                           {chat.ultima_mensagem}
                         </p>
                       ) : (
-                        <p className="text-sm text-gray-400 mt-1 italic">
-                          Nenhuma mensagem ainda
+                        <p className="text-sm text-gray-400 mt-0.5 italic">
+                          Nova conversa
                         </p>
                       )}
                     </div>

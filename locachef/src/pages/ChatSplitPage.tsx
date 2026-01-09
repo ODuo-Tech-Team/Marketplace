@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, isChatAberto, ESTADOS_BR } from '../contexts/AppContext'
 import { supabase } from '../lib/supabase'
-import { HardHat, Send, Loader2, X, FileText, Check, XCircle, MapPin, Truck, Copy, MessageCircle, Package, ChevronLeft, PartyPopper } from 'lucide-react'
+import { HardHat, Send, Loader2, X, FileText, Check, XCircle, MapPin, Truck, Copy, MessageCircle, Package, ChevronLeft, PartyPopper, ArrowLeft } from 'lucide-react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // ID especial para mensagens do sistema
@@ -601,6 +601,12 @@ function ChatList({
       {chats.map((chat) => {
         const isSelected = chat.id === selectedChatId
         const isLocador = chat.locador_id === userId
+        // Nome da outra parte: se sou locador, mostro o locatário, e vice-versa
+        const outraParte = isLocador ? chat.locatario_nome : chat.locador_nome
+        // Verifica se tem mensagem não lida
+        const temMensagemNaoLida = chat.ultima_mensagem &&
+          !chat.ultima_mensagem_lida &&
+          chat.ultima_mensagem_sender_id !== userId
 
         return (
           <button
@@ -608,19 +614,35 @@ function ChatList({
             onClick={() => onSelectChat(chat.id)}
             className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left ${
               isSelected ? 'bg-amber-50 border-l-4 border-amber-600' : ''
-            }`}
+            } ${temMensagemNaoLida && !isSelected ? 'bg-orange-50' : ''}`}
           >
             <div className="w-12 h-12 bg-amber-100 rounded-lg flex-shrink-0 flex items-center justify-center">
               <Package className="w-6 h-6 text-amber-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-800 truncate text-base">
-                {chat.equipamento?.nome || 'Equipamento'}
+              {/* Nome da outra pessoa */}
+              <h3 className={`text-gray-800 truncate text-base ${temMensagemNaoLida ? 'font-bold' : 'font-semibold'}`}>
+                {outraParte || 'Cliente'}
               </h3>
-              <p className="text-sm text-gray-500">
-                {isLocador ? 'Você é o locador' : 'Você é o locatário'}
+              {/* Nome do equipamento */}
+              <p className="text-xs text-amber-600 font-medium truncate">
+                {chat.equipamento?.nome || 'Equipamento'}
               </p>
+              {/* Última mensagem ou status */}
+              {chat.ultima_mensagem ? (
+                <p className={`text-sm truncate mt-0.5 ${temMensagemNaoLida ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
+                  {chat.ultima_mensagem}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400 mt-0.5 italic">
+                  Nova conversa
+                </p>
+              )}
             </div>
+            {/* Indicador de mensagem não lida */}
+            {temMensagemNaoLida && (
+              <div className="w-3 h-3 bg-amber-500 rounded-full flex-shrink-0" />
+            )}
           </button>
         )
       })}
@@ -1044,7 +1066,15 @@ export default function ChatSplitPage() {
           w-full lg:w-80 xl:w-96 bg-white border-r border-gray-200 flex-shrink-0
           ${showList || !chatId ? 'block' : 'hidden lg:block'}
         `}>
-          <div className="p-4 border-b border-gray-200">
+          <div className="p-4 border-b border-gray-200 flex items-center gap-3">
+            {/* Botão Voltar para Home */}
+            <button
+              onClick={() => navigate('/')}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Voltar para Home"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
             <h2 className="text-xl font-bold text-gray-800">Conversas</h2>
           </div>
           <div className="overflow-y-auto h-[calc(100vh-140px)]">
@@ -1089,6 +1119,14 @@ export default function ChatSplitPage() {
               {/* Header do chat */}
               <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  {/* Botão Voltar */}
+                  <button
+                    onClick={() => navigate(-1)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Voltar"
+                  >
+                    <ArrowLeft className="w-5 h-5 text-gray-600" />
+                  </button>
                   <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
                     <Package className="w-5 h-5 text-amber-600" />
                   </div>

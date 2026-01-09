@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, type Mensagem, type Chat, type Proposta, isChatAberto } from '../contexts/AppContext'
 import { supabase } from '../lib/supabase'
@@ -301,6 +301,7 @@ CEP: ${proposta.endereco_cep || ''}`
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { fetchMensagens, enviarMensagem, fetchChat, enviarProposta, fetchProposta, responderProposta, marcarMensagensComoLidas, marcarComoEntregue } = useApp()
 
   const [chat, setChat] = useState<Chat | null>(null)
@@ -867,12 +868,13 @@ export default function ChatPage() {
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              to="/chats"
+            <button
+              onClick={() => navigate(-1)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Voltar"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </Link>
+            </button>
             <div>
               <h1 className="text-lg font-semibold text-gray-800">
                 {chat.equipamento?.nome || 'Conversa'}

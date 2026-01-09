@@ -98,6 +98,9 @@ export interface Chat {
   ultima_mensagem_data?: string
   ultima_mensagem_lida?: boolean
   ultima_mensagem_sender_id?: string
+  // Nomes das partes (para exibição na lista)
+  locador_nome?: string
+  locatario_nome?: string
 }
 
 // RAIO-X: mensagens tem sender_id (não remetente_id), texto (não conteudo)
@@ -778,9 +781,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         chatsData = data || []
       }
 
-      // Busca a última mensagem de cada chat
+      // Busca a última mensagem de cada chat e nomes dos participantes
       if (chatsData.length > 0) {
         const chatIds = chatsData.map(c => c.id)
+
+        // Coleta todos os IDs de usuários (locadores e locatários)
+        const userIds = [...new Set([
+          ...chatsData.map(c => c.locador_id),
+          ...chatsData.map(c => c.locatario_id)
+        ].filter(Boolean))]
+
+        // Busca nomes dos usuários
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name, nome_empresa, email')
+          .in('id', userIds)
+
+        const nomesMap = new Map<string, string>()
+        if (profilesData) {
+          for (const p of profilesData) {
+            nomesMap.set(p.id, p.nome_empresa || p.full_name || p.email || 'Usuário')
+          }
+        }
 
         // Para cada chat, busca a última mensagem
         const { data: mensagensData } = await supabase
@@ -789,10 +811,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .in('chat_id', chatIds)
           .order('created_at', { ascending: false })
 
-        if (mensagensData && mensagensData.length > 0) {
-          // Agrupa por chat_id e pega a primeira (mais recente) de cada
-          const ultimasMensagens = new Map<string, { texto: string; created_at: string; lida: boolean; sender_id: string }>()
+        // Agrupa por chat_id e pega a primeira (mais recente) de cada
+        const ultimasMensagens = new Map<string, { texto: string; created_at: string; lida: boolean; sender_id: string }>()
 
+        if (mensagensData && mensagensData.length > 0) {
           for (const msg of mensagensData) {
             if (!ultimasMensagens.has(msg.chat_id)) {
               ultimasMensagens.set(msg.chat_id, {
@@ -803,16 +825,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
               })
             }
           }
-
-          // Adiciona as últimas mensagens aos chats
-          chatsData = chatsData.map(chat => ({
-            ...chat,
-            ultima_mensagem: ultimasMensagens.get(chat.id)?.texto,
-            ultima_mensagem_data: ultimasMensagens.get(chat.id)?.created_at,
-            ultima_mensagem_lida: ultimasMensagens.get(chat.id)?.lida,
-            ultima_mensagem_sender_id: ultimasMensagens.get(chat.id)?.sender_id
-          }))
         }
+
+        // Adiciona as últimas mensagens e nomes aos chats
+        chatsData = chatsData.map(chat => ({
+          ...chat,
+          ultima_mensagem: ultimasMensagens.get(chat.id)?.texto,
+          ultima_mensagem_data: ultimasMensagens.get(chat.id)?.created_at,
+          ultima_mensagem_lida: ultimasMensagens.get(chat.id)?.lida,
+          ultima_mensagem_sender_id: ultimasMensagens.get(chat.id)?.sender_id,
+          locador_nome: nomesMap.get(chat.locador_id),
+          locatario_nome: nomesMap.get(chat.locatario_id)
+        }))
       }
 
       return chatsData
