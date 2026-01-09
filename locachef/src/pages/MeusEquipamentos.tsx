@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, CATEGORIAS, ESTADOS_BR, CATEGORIA_CORES, type Equipamento, type NovoEquipamento, type EntregaPendente, isEquipamentoDisponivel } from '../contexts/AppContext'
-import { HardHat, Plus, X, Loader2, Package, MapPin, BadgeCheck, Truck, Copy, Check, User, ImagePlus, Trash2, RotateCcw, Pencil } from 'lucide-react'
+import { HardHat, Plus, X, Loader2, Package, MapPin, BadgeCheck, Truck, Copy, Check, User, ImagePlus, Trash2, RotateCcw, Pencil, MessageCircle } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ReviewStars from '../components/ReviewStars'
 
@@ -758,7 +758,7 @@ function EquipamentoCard({
 
 export default function MeusEquipamentos() {
   const { user, profile, signOut } = useAuth()
-  const { addEquipamento, fetchMeusEquipamentos, fetchEntregasPendentes, marcarComoEntregue, confirmarRetorno, uploadImagens, deletarEquipamento, atualizarEquipamento } = useApp()
+  const { addEquipamento, fetchMeusEquipamentos, fetchEntregasPendentes, marcarComoEntregue, confirmarRetorno, uploadImagens, deletarEquipamento, atualizarEquipamento, mensagensNaoLidas, fetchMensagensNaoLidas, setupMensagensRealtime } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Estados principais
@@ -777,6 +777,14 @@ export default function MeusEquipamentos() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const mountedRef = useRef(true)
+
+  // Busca mensagens não lidas e configura Realtime (igual à Home)
+  useEffect(() => {
+    if (user?.id) {
+      fetchMensagensNaoLidas(user.id)
+      setupMensagensRealtime(user.id)
+    }
+  }, [user?.id])
 
   // Abre modal automaticamente se vier do cadastro de locador (?novo=1)
   // Ou abre aba de entregas se vier com ?tab=entregas
@@ -1093,13 +1101,28 @@ export default function MeusEquipamentos() {
               Gerencie seus equipamentos e entregas
             </p>
           </div>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            Anunciar Novo
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Ícone de Chat com contador */}
+            <Link
+              to="/chats"
+              className="p-3 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative"
+              title="Minhas Conversas"
+            >
+              <MessageCircle className="w-6 h-6" />
+              {mensagensNaoLidas > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                  {mensagensNaoLidas > 9 ? '9+' : mensagensNaoLidas}
+                </span>
+              )}
+            </Link>
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              Anunciar Novo
+            </button>
+          </div>
         </div>
 
         {/* Sistema de Abas */}

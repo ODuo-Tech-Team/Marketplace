@@ -76,30 +76,49 @@ export default function ChatsPage() {
           <div className="space-y-3">
             {chats.map((chat) => {
               const equipamento = chat.equipamento
-              const isLocador = chat.locador_id === user?.id
+              // Verifica se a última mensagem é não lida E foi enviada por outra pessoa
+              const temMensagemNaoLida = chat.ultima_mensagem &&
+                !chat.ultima_mensagem_lida &&
+                chat.ultima_mensagem_sender_id !== user?.id
 
               return (
                 <Link
                   key={chat.id}
                   to={`/chat/${chat.id}`}
-                  className="block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-4"
+                  className={`block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 ${
+                    temMensagemNaoLida ? 'border-l-4 border-amber-500' : ''
+                  }`}
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Package className="w-6 h-6 text-amber-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-800 truncate">
-                        {equipamento?.nome || 'Equipamento'}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {isLocador ? 'Você é o locador' : 'Você é o locatário'}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {new Date(chat.created_at).toLocaleDateString('pt-BR')}
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className={`text-gray-800 truncate ${temMensagemNaoLida ? 'font-bold' : 'font-semibold'}`}>
+                          {equipamento?.nome || 'Equipamento'}
+                        </h3>
+                        {chat.ultima_mensagem_data && (
+                          <span className="text-xs text-gray-400 flex-shrink-0">
+                            {new Date(chat.ultima_mensagem_data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      {chat.ultima_mensagem ? (
+                        <p className={`text-sm truncate mt-1 ${
+                          temMensagemNaoLida ? 'text-gray-800 font-semibold' : 'text-gray-500'
+                        }`}>
+                          {chat.ultima_mensagem}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-gray-400 mt-1 italic">
+                          Nenhuma mensagem ainda
+                        </p>
+                      )}
                     </div>
-                    <MessageCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    {temMensagemNaoLida && (
+                      <div className="w-3 h-3 bg-amber-500 rounded-full flex-shrink-0" />
+                    )}
                   </div>
                 </Link>
               )

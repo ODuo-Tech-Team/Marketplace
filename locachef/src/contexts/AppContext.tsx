@@ -93,6 +93,11 @@ export interface Chat {
   // Dados carregados via join
   proposta?: Proposta
   equipamento?: Equipamento
+  // Última mensagem (para exibição na lista)
+  ultima_mensagem?: string
+  ultima_mensagem_data?: string
+  ultima_mensagem_lida?: boolean
+  ultima_mensagem_sender_id?: string
 }
 
 // RAIO-X: mensagens tem sender_id (não remetente_id), texto (não conteudo)
@@ -725,7 +730,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const fetchMeusChats = async (userId: string): Promise<Chat[]> => {
     try {
-      // Primeiro tenta com a relação
+      // Busca chats com equipamentos
       const { data, error } = await supabase
         .from('chats')
         .select(`
@@ -735,23 +740,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .or(`locador_id.eq.${userId},locatario_id.eq.${userId}`)
         .order('created_at', { ascending: false })
 
+      let chatsData: Chat[] = []
+
       if (error) {
         console.warn('[fetchMeusChats] Erro com relação, tentando fallback:', error.message)
 
         // Fallback: busca chats e equipamentos separadamente
-        const { data: chatsData, error: chatsError } = await supabase
+        const { data: chatsRaw, error: chatsError } = await supabase
           .from('chats')
           .select('*')
           .or(`locador_id.eq.${userId},locatario_id.eq.${userId}`)
           .order('created_at', { ascending: false })
 
-        if (chatsError || !chatsData) {
+        if (chatsError || !chatsRaw) {
           console.error('[fetchMeusChats] Falha no fallback:', chatsError?.message)
           return []
         }
 
         // Busca todos os equipamentos relacionados
-        const equipamentoIds = [...new Set(chatsData.map(c => c.equipamento_id).filter(Boolean))]
+        const equipamentoIds = [...new Set(chatsRaw.map(c => c.equipamento_id).filter(Boolean))]
         if (equipamentoIds.length > 0) {
           const { data: eqsData } = await supabase
             .from('equipamentos')
@@ -760,16 +767,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           const eqsMap = new Map((eqsData || []).map(eq => [eq.id, eq]))
 
-          return chatsData.map(chat => ({
+          chatsData = chatsRaw.map(chat => ({
             ...chat,
             equipamento: eqsMap.get(chat.equipamento_id) || null
           })) as Chat[]
+        } else {
+          chatsData = chatsRaw as Chat[]
         }
-
-        return chatsData as Chat[]
+      } else {
+        chatsData = data || []
       }
 
-      return data || []
+      // Busca a última mensagem de cada chat
+      if (chatsData.length > 0) {
+        const chatIds = chatsData.map(c => c.id)
+
+        // Para cada chat, busca a última mensagem
+        const { data: mensagensData } = await supabase
+          .from('mensagens')
+          .select('chat_id, texto, created_at, lida, sender_id')
+          .in('chat_id', chatIds)
+          .order('created_at', { ascending: false })
+
+        if (mensagensData && mensagensData.length > 0) {
+          // Agrupa por chat_id e pega a primeira (mais recente) de cada
+          const ultimasMensagens = new Map<string, { texto: string; created_at: string; lida: boolean; sender_id: string }>()
+
+          for (const msg of mensagensData) {
+            if (!ultimasMensagens.has(msg.chat_id)) {
+              ultimasMensagens.set(msg.chat_id, {
+                texto: msg.texto,
+                created_at: msg.created_at,
+                lida: msg.lida ?? true,
+                sender_id: msg.sender_id
+              })
+            }
+          }
+
+          // Adiciona as últimas mensagens aos chats
+          chatsData = chatsData.map(chat => ({
+            ...chat,
+            ultima_mensagem: ultimasMensagens.get(chat.id)?.texto,
+            ultima_mensagem_data: ultimasMensagens.get(chat.id)?.created_at,
+            ultima_mensagem_lida: ultimasMensagens.get(chat.id)?.lida,
+            ultima_mensagem_sender_id: ultimasMensagens.get(chat.id)?.sender_id
+          }))
+        }
+      }
+
+      return chatsData
     } catch (err) {
       console.error('[fetchMeusChats] Erro inesperado:', err)
       return []

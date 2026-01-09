@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, isChatAberto, ESTADOS_BR } from '../contexts/AppContext'
+import { useApp, type Mensagem, type Chat, type Proposta, isChatAberto } from '../contexts/AppContext'
 import { supabase } from '../lib/supabase'
 import { HardHat, ArrowLeft, Send, Loader2, X, FileText, Check, XCircle, MapPin, Truck, Copy, Package } from 'lucide-react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -149,230 +149,6 @@ function PropostaModal({
               <span>{loading ? 'Enviando...' : 'Enviar Proposta'}</span>
             </button>
           </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// Modal para preencher endereço de entrega ao aceitar proposta
-function EnderecoModal({
-  isOpen,
-  onClose,
-  onConfirmar,
-  loading
-}: {
-  isOpen: boolean
-  onClose: () => void
-  onConfirmar: (endereco: EnderecoEntrega) => Promise<void>
-  loading: boolean
-}) {
-  const [cep, setCep] = useState('')
-  const [rua, setRua] = useState('')
-  const [numero, setNumero] = useState('')
-  const [complemento, setComplemento] = useState('')
-  const [bairro, setBairro] = useState('')
-  const [cidade, setCidade] = useState('')
-  const [uf, setUf] = useState('')
-  const [buscandoCep, setBuscandoCep] = useState(false)
-
-  // Busca endereço pelo CEP
-  const buscarCep = async (cepValue: string) => {
-    const cepLimpo = cepValue.replace(/\D/g, '')
-    if (cepLimpo.length !== 8) return
-
-    setBuscandoCep(true)
-    try {
-      const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`)
-      const data = await response.json()
-      if (!data.erro) {
-        setRua(data.logradouro || '')
-        setBairro(data.bairro || '')
-        setCidade(data.localidade || '')
-        setUf(data.uf || '')
-      }
-    } catch (err) {
-      console.error('Erro ao buscar CEP:', err)
-    }
-    setBuscandoCep(false)
-  }
-
-  const handleCepChange = (value: string) => {
-    // Formata CEP: 00000-000
-    const cepLimpo = value.replace(/\D/g, '')
-    let cepFormatado = cepLimpo
-    if (cepLimpo.length > 5) {
-      cepFormatado = `${cepLimpo.slice(0, 5)}-${cepLimpo.slice(5, 8)}`
-    }
-    setCep(cepFormatado)
-
-    // Busca automática quando completar 8 dígitos
-    if (cepLimpo.length === 8) {
-      buscarCep(cepLimpo)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // ESTRUTURA REAL DO BANCO: só tem endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf
-    // Combina rua, número, complemento e bairro em um único campo 'logradouro'
-    const logradouroCompleto = `${rua}, ${numero}${complemento ? ` - ${complemento}` : ''}${bairro ? ` - ${bairro}` : ''}`
-    await onConfirmar({
-      cep,
-      logradouro: logradouroCompleto,
-      cidade,
-      uf
-    })
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-2">
-            <Truck className="w-5 h-5 text-orange-600" />
-            <h2 className="text-xl font-semibold text-gray-800">Endereço de Entrega</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <p className="text-sm text-gray-600 bg-orange-50 p-3 rounded-lg">
-            Informe o endereço para entrega do equipamento. O locador precisará desta informação para realizar o despacho.
-          </p>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              CEP *
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={cep}
-                onChange={(e) => handleCepChange(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                placeholder="00000-000"
-                maxLength={9}
-                required
-              />
-              {buscandoCep && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-orange-500" />
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rua/Logradouro *
-            </label>
-            <input
-              type="text"
-              value={rua}
-              onChange={(e) => setRua(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-              placeholder="Rua, Avenida, etc."
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Número *
-              </label>
-              <input
-                type="text"
-                value={numero}
-                onChange={(e) => setNumero(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                placeholder="123"
-                required
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Complemento
-              </label>
-              <input
-                type="text"
-                value={complemento}
-                onChange={(e) => setComplemento(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                placeholder="Apto, Bloco, etc."
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bairro *
-            </label>
-            <input
-              type="text"
-              value={bairro}
-              onChange={(e) => setBairro(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-              placeholder="Bairro"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cidade *
-              </label>
-              <input
-                type="text"
-                value={cidade}
-                onChange={(e) => setCidade(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                placeholder="Cidade"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                UF *
-              </label>
-              <select
-                value={uf}
-                onChange={(e) => setUf(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
-                required
-              >
-                <option value="">UF</option>
-                {ESTADOS_BR.map((estado) => (
-                  <option key={estado} value={estado}>{estado}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:ring-4 focus:ring-green-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Confirmando...</span>
-              </>
-            ) : (
-              <>
-                <Check className="w-5 h-5" />
-                <span>Confirmar Endereço e Aceitar</span>
-              </>
-            )}
-          </button>
         </form>
       </div>
     </div>
@@ -539,9 +315,6 @@ export default function ChatPage() {
   const [apagandoProposta, setApagandoProposta] = useState(false)
   const [erro, setErro] = useState<string | null>(null) // Estado de erro visual
   const [sucesso, setSucesso] = useState<string | null>(null) // Estado de sucesso visual
-  // Estados para modal de endereço
-  const [modalEnderecoOpen, setModalEnderecoOpen] = useState(false)
-  const [propostaParaAceitar, setPropostaParaAceitar] = useState<string | null>(null)
 
   // Ref para o input de mensagem
   const inputMensagemRef = useRef<HTMLInputElement>(null)
@@ -814,71 +587,40 @@ export default function ChatPage() {
     }
   }
 
-  // Quando clica em aceitar, abre modal de endereço
-  // Function reserved for future use
-  const handleAceitarProposta = (propostaId: string) => {
-    setPropostaParaAceitar(propostaId)
-    setModalEnderecoOpen(true)
-  }
-
-  // Quando confirma o endereço e aceita a proposta
-  const handleConfirmarEnderecoEAceitar = async (endereco: EnderecoEntrega) => {
-    if (!chatId || !user || !mountedRef.current || !propostaParaAceitar) return
-
+  // Quando clica em aceitar, usa o endereço já informado na solicitação
+  const handleAceitarProposta = async (propostaId: string) => {
+    if (!chatId || !user || !mountedRef.current) return
     setRespondendoProposta(true)
 
     try {
-      // Chama responderProposta com o endereço
-      const result = await responderProposta(propostaParaAceitar, chatId, true, user.id, endereco)
+      // Usa o endereço que já foi informado na solicitação (salvo no chat)
+      const enderecoExistente = chat?.endereco_entrega_logradouro ? {
+        cep: chat.endereco_entrega_cep || '',
+        logradouro: chat.endereco_entrega_logradouro,
+        cidade: chat.endereco_entrega_cidade || '',
+        uf: chat.endereco_entrega_uf || ''
+      } : undefined
 
+      const result = await responderProposta(propostaId, chatId, true, user.id, enderecoExistente)
       if (!mountedRef.current) return
-
       setRespondendoProposta(false)
 
       if (result.success) {
-        // Fecha modal e limpa estado
-        setModalEnderecoOpen(false)
-        setPropostaParaAceitar(null)
-
-        // Mostra feedback de sucesso - UX 35+
-        mostrarSucesso('✅ Endereço enviado com sucesso! Aguarde a confirmação de entrega do locador.')
-
-        // Atualiza a proposta localmente
-        // ESTRUTURA REAL: só tem endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf
-        // setPropostas(prev => ({
-        //   ...prev,
-        //   [propostaParaAceitar]: {
-        //     ...prev[propostaParaAceitar],
-        //     status: 'aceita' as const,
-        //     endereco_cep: endereco.cep,
-        //     endereco_logradouro: endereco.logradouro,
-        //     endereco_cidade: endereco.cidade,
-        //     endereco_uf: endereco.uf
-        //   }
-        // }))
-
-        // Recarrega dados do servidor
+        mostrarSucesso('Proposta aceita com sucesso! O locador irá preparar a entrega.')
         await carregarChat()
-        await fetchProposta(propostaParaAceitar)
-        // if (propostaAtualizada && mountedRef.current) {
-        //   setPropostas(prev => ({
-        //     ...prev,
-        //     [propostaParaAceitar]: propostaAtualizada
-        //   }))
-        // }
       } else {
-        mostrarErro(`Erro ao aceitar proposta: ${result.error || 'Erro desconhecido'}`)
+        mostrarErro(result.error || 'Erro ao aceitar proposta')
       }
     } catch (err) {
-      console.error('[handleConfirmarEnderecoEAceitar] Erro:', err)
+      console.error('[handleAceitarProposta] Erro:', err)
       if (mountedRef.current) {
         setRespondendoProposta(false)
-        mostrarErro('Erro inesperado ao processar proposta. Tente novamente.')
+        mostrarErro('Erro inesperado ao processar proposta.')
       }
     }
   }
 
-  // Para recusar proposta (sem endereço)
+  // Para recusar proposta
   // Function reserved for future use
   const handleRecusarProposta = async (propostaId: string) => {
     if (!chatId || !user || !mountedRef.current) return
@@ -994,11 +736,10 @@ export default function ChatPage() {
     }
   }
 
-  // Handler para locatário aceitar proposta (abre modal de endereço)
+  // Handler para locatário aceitar proposta
   const handleAceitarPropostaHeader = () => {
     if (!chat?.proposta?.id) return
-    setPropostaParaAceitar(chat.proposta.id)
-    setModalEnderecoOpen(true)
+    handleAceitarProposta(chat.proposta.id)
   }
 
   const formatarHora = (dateStr: string) => {
@@ -1517,16 +1258,6 @@ export default function ChatPage() {
         equipamentoNome={chat?.equipamento?.nome}
         equipamentoPreco={chat?.equipamento?.preco_diaria}
         quantidadeDias={chat?.quantidade_dias}
-      />
-
-      <EnderecoModal
-        isOpen={modalEnderecoOpen}
-        onClose={() => {
-          setModalEnderecoOpen(false)
-          setPropostaParaAceitar(null)
-        }}
-        onConfirmar={handleConfirmarEnderecoEAceitar}
-        loading={respondendoProposta}
       />
     </div>
   )

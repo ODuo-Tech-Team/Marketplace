@@ -671,6 +671,7 @@ export default function ChatSplitPage() {
   const mountedRef = useRef(true)
   const erroTimeoutRef = useRef<number | null>(null)
   const sucessoTimeoutRef = useRef<number | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const nomeUsuario = profile?.nome_empresa || profile?.full_name || user?.email || 'Perfil'
 
@@ -822,6 +823,10 @@ export default function ChatSplitPage() {
       await carregarMensagens(chatId)
     }
     setEnviando(false)
+    // Mantém foco no input após enviar (setTimeout garante que React terminou de renderizar)
+    setTimeout(() => {
+      inputRef.current?.focus()
+    }, 0)
   }
 
   // Envia proposta com valores do modal
@@ -1328,6 +1333,7 @@ export default function ChatSplitPage() {
               <div className="bg-white border-t p-3">
                 <form onSubmit={handleEnviar} className="flex gap-2">
                   <input
+                    ref={inputRef}
                     type="text"
                     value={novaMensagem}
                     onChange={(e) => setNovaMensagem(e.target.value)}
