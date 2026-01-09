@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { HardHat, Loader2, TrendingUp, Users, Package, ArrowLeft, RefreshCw, AlertCircle, Building2, KeyRound, Mail, Check, X, Eye, Calendar, Clock } from 'lucide-react'
+import { HardHat, Loader2, TrendingUp, Users, Package, ArrowLeft, RefreshCw, AlertCircle, Building2, KeyRound, Mail, Check, X, Eye, EyeOff, Calendar, Clock, Trash2, Search, UserCog } from 'lucide-react'
 
 // Interface para dados resumidos
 interface ResumoData {
@@ -63,6 +63,15 @@ interface LocadorDetalhe {
   total_equipamentos: number
 }
 
+// Interface para cliente (usuário do sistema)
+interface Cliente {
+  id: string
+  email: string
+  nome: string
+  tipo_usuario: 'locador' | 'locatario'
+  created_at: string
+}
+
 export default function Adm() {
   const { profile, signOut } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -78,6 +87,20 @@ export default function Adm() {
   const [modalAberto, setModalAberto] = useState(false)
   const [loadingDetalhe, setLoadingDetalhe] = useState(false)
   const [detalheLocador, setDetalheLocador] = useState<LocadorDetalhe | null>(null)
+
+  // Estados para gerenciamento de clientes
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [loadingClientes, setLoadingClientes] = useState(false)
+  const [buscaCliente, setBuscaCliente] = useState('')
+  const [resetandoSenha, setResetandoSenha] = useState<string | null>(null)
+  const [excluindoCliente, setExcluindoCliente] = useState<string | null>(null)
+  const [sucessoCliente, setSucessoCliente] = useState<string | null>(null)
+
+  // Estados para modal de reset de senha
+  const [modalResetAberto, setModalResetAberto] = useState(false)
+  const [clienteParaReset, setClienteParaReset] = useState<Cliente | null>(null)
+  const [novaSenhaInput, setNovaSenhaInput] = useState('')
+  const [mostrarSenhaInput, setMostrarSenhaInput] = useState(false)
 
   // Função para carregar detalhes de um locador específico
   const carregarDetalheLocador = async (locadorId: string, locadorNome: string) => {
@@ -102,12 +125,16 @@ export default function Adm() {
       const equipamentos = equipamentosData || []
       const equipIds = equipamentos.map(e => e.id)
 
-      // 3. Buscar propostas aceitas desses equipamentos
-      const { data: propostasData } = await supabase
+      // 3. Buscar propostas aceitas desses equipamentos (só campos que existem)
+      const { data: propostasData, error: errPropostas } = await supabase
         .from('propostas')
-        .select('id, equipamento_id, status_entrega, valor_diaria, dias_solicitados, created_at')
+        .select('id, equipamento_id, created_at')
         .in('equipamento_id', equipIds)
         .eq('status', 'aceita')
+
+      if (errPropostas) {
+        console.log('[Adm] Erro ao buscar propostas:', errPropostas.message)
+      }
 
       const propostas = propostasData || []
 
@@ -142,11 +169,8 @@ export default function Adm() {
 
       // 6. Montar lista de equipamentos com status
       const equipamentosDetalhe: EquipamentoDetalhe[] = equipamentos.map(eq => {
-        // Verificar se tem proposta ativa (aceita e não devolvido)
-        const propostaAtiva = propostas.find(p =>
-          p.equipamento_id === eq.id &&
-          (!p.status_entrega || p.status_entrega !== 'DEVOLVIDO')
-        )
+        // Verificar se tem proposta ativa (aceita)
+        const propostaAtiva = propostas.find(p => p.equipamento_id === eq.id)
 
         if (propostaAtiva) {
           return {
@@ -171,16 +195,15 @@ export default function Adm() {
       const historico: HistoricoLocacao[] = propostas.map(p => {
         const eq = equipamentos.find(e => e.id === p.equipamento_id)
         const clienteNome = propostaClienteMap.get(p.id) || 'Cliente'
-        const isAtiva = !p.status_entrega || p.status_entrega !== 'DEVOLVIDO'
 
         return {
           id: p.id,
           equipamento_nome: eq?.nome || 'Equipamento',
           cliente_nome: clienteNome,
           data_inicio: p.created_at,
-          status: isAtiva ? 'ativa' as const : 'finalizada' as const,
-          valor_diaria: p.valor_diaria || 0,
-          dias: p.dias_solicitados || 0
+          status: 'ativa' as const,
+          valor_diaria: 0,
+          dias: 0
         }
       }).sort((a, b) => new Date(b.data_inicio).getTime() - new Date(a.data_inicio).getTime())
 
@@ -209,6 +232,160 @@ export default function Adm() {
   const fecharModal = () => {
     setModalAberto(false)
     setDetalheLocador(null)
+  }
+
+  // =====================================================
+  // GERENCIAMENTO DE CLIENTES
+  // =====================================================
+
+  // Busca clientes pelo email ou nome
+  const buscarClientes = async () => {
+    if (!buscaCliente.trim()) {
+      setClientes([])
+      return
+    }
+
+    setLoadingClientes(true)
+    try {
+      const termoBusca = buscaCliente.trim().toLowerCase()
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, nome_empresa, tipo_usuario, created_at')
+        .or(`email.ilike.%${termoBusca}%,full_name.ilike.%${termoBusca}%,nome_empresa.ilike.%${termoBusca}%`)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (error) {
+        console.error('[Adm] Erro ao buscar clientes:', error)
+        setError('Erro ao buscar clientes')
+        return
+      }
+
+      const lista: Cliente[] = (data || []).map(c => ({
+        id: c.id,
+        email: c.email || '',
+        nome: c.nome_empresa || c.full_name || c.email || 'Sem nome',
+        tipo_usuario: c.tipo_usuario || 'locatario',
+        created_at: c.created_at
+      }))
+
+      setClientes(lista)
+    } catch (err) {
+      console.error('[Adm] Erro ao buscar clientes:', err)
+      setError('Erro inesperado ao buscar clientes')
+    } finally {
+      setLoadingClientes(false)
+    }
+  }
+
+  // Abre modal para resetar senha do cliente
+  const abrirModalReset = (cliente: Cliente) => {
+    setClienteParaReset(cliente)
+    setNovaSenhaInput('')
+    setMostrarSenhaInput(false)
+    setModalResetAberto(true)
+  }
+
+  // Fecha modal de reset
+  const fecharModalReset = () => {
+    setModalResetAberto(false)
+    setClienteParaReset(null)
+    setNovaSenhaInput('')
+  }
+
+  // Executa o reset de senha via Edge Function
+  const executarResetSenha = async () => {
+    if (!clienteParaReset || !novaSenhaInput) return
+
+    if (novaSenhaInput.length < 6) {
+      setError('Senha deve ter pelo menos 6 caracteres')
+      return
+    }
+
+    setResetandoSenha(clienteParaReset.id)
+    setSucessoCliente(null)
+
+    try {
+      // Usar supabase.functions.invoke que já cuida da autenticação
+      const { data, error: fnError } = await supabase.functions.invoke('admin-reset-password', {
+        body: {
+          userId: clienteParaReset.id,
+          novaSenha: novaSenhaInput
+        }
+      })
+
+      if (fnError) {
+        console.error('[Adm] Erro da Edge Function:', fnError)
+        setError(fnError.message || 'Erro ao resetar senha')
+        setResetandoSenha(null)
+        return
+      }
+
+      if (data?.error) {
+        console.error('[Adm] Erro retornado:', data.error)
+        setError(data.error)
+        setResetandoSenha(null)
+        return
+      }
+
+      // Sucesso!
+      fecharModalReset()
+      setSucessoCliente(`Senha de ${clienteParaReset.nome} alterada para "${novaSenhaInput}". Cliente foi deslogado.`)
+      setTimeout(() => setSucessoCliente(null), 5000)
+
+    } catch (err) {
+      console.error('[Adm] Erro ao resetar senha:', err)
+      setError('Erro de conexão ao resetar senha')
+    } finally {
+      setResetandoSenha(null)
+    }
+  }
+
+  // Exclui cliente do sistema
+  const excluirCliente = async (cliente: Cliente) => {
+    // Confirmação
+    const confirma = window.confirm(
+      `Tem certeza que deseja EXCLUIR o cliente "${cliente.nome}" (${cliente.email})?\n\nEsta ação é IRREVERSÍVEL e removerá todos os dados do usuário.`
+    )
+
+    if (!confirma) return
+
+    setExcluindoCliente(cliente.id)
+    setSucessoCliente(null)
+
+    try {
+      // 1. Remove o profile (as outras tabelas devem ter CASCADE ou serão órfãs)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', cliente.id)
+
+      if (profileError) {
+        console.error('[Adm] Erro ao excluir profile:', profileError)
+        setError(`Erro ao excluir cliente: ${profileError.message}`)
+        setExcluindoCliente(null)
+        return
+      }
+
+      // Nota: A exclusão do auth.users requer uma Edge Function com service_role
+      // O profile foi removido, então o usuário não conseguirá mais acessar
+
+      // 2. Remove da lista local
+      setClientes(prev => prev.filter(c => c.id !== cliente.id))
+
+      setSucessoCliente(`Cliente ${cliente.nome} excluído com sucesso!`)
+      setTimeout(() => setSucessoCliente(null), 4000)
+
+      // Recarrega dashboard para atualizar contadores
+      await carregarResumo()
+
+    } catch (err) {
+      console.error('[Adm] Erro ao excluir cliente:', err)
+      setError('Erro inesperado ao excluir cliente')
+    } finally {
+      setExcluindoCliente(null)
+    }
   }
 
   const carregarDashboard = async () => {
@@ -309,40 +486,58 @@ export default function Adm() {
   const carregarResumo = async () => {
     try {
       // Total de propostas aceitas (locações)
-      const { count: totalLocacoes } = await supabase
+      const { count: totalLocacoes, error: errLocacoes } = await supabase
         .from('propostas')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'aceita')
 
+      if (errLocacoes) {
+        console.log('[Adm] Erro ao contar locações:', errLocacoes.message)
+      }
+
       // Total de locadores (quem tem equipamentos cadastrados)
-      const { data: locadoresData } = await supabase
+      const { data: locadoresData, error: errLocadores } = await supabase
         .from('equipamentos')
         .select('locador_id')
+
+      if (errLocadores) {
+        console.log('[Adm] Erro ao buscar locadores:', errLocadores.message)
+      }
 
       const locadoresUnicos = new Set((locadoresData || []).map(e => e.locador_id))
 
       // Total de locatários (usuários que fizeram locações)
-      const { data: chatsData } = await supabase
+      const { data: chatsData, error: errChats } = await supabase
         .from('chats')
         .select('locatario_id')
+
+      if (errChats) {
+        console.log('[Adm] Erro ao buscar chats:', errChats.message)
+      }
 
       const locatariosUnicos = new Set((chatsData || []).map(c => c.locatario_id))
 
       // Total de equipamentos
-      const { count: totalEquipamentos } = await supabase
+      const { count: totalEquipamentos, error: errEquip } = await supabase
         .from('equipamentos')
         .select('*', { count: 'exact', head: true })
 
-      // Locações ativas (propostas aceitas sem status_entrega = DEVOLVIDO)
-      const { data: locacoesAtivasData } = await supabase
+      if (errEquip) {
+        console.log('[Adm] Erro ao contar equipamentos:', errEquip.message)
+      }
+
+      // Locações ativas - tenta buscar só o id (campo que sabemos que existe)
+      const { data: locacoesAtivasData, error: errAtivas } = await supabase
         .from('propostas')
-        .select('id, status_entrega')
+        .select('id')
         .eq('status', 'aceita')
 
-      const locacoesAtivas = (locacoesAtivasData || []).filter(p => {
-        const statusEntrega = (p as { status_entrega?: string }).status_entrega
-        return !statusEntrega || statusEntrega !== 'DEVOLVIDO'
-      }).length
+      if (errAtivas) {
+        console.log('[Adm] Erro ao buscar locações ativas:', errAtivas.message)
+      }
+
+      // Por enquanto, considera todas as aceitas como ativas
+      const locacoesAtivas = (locacoesAtivasData || []).length
 
       setResumo({
         total_locacoes: totalLocacoes || 0,
@@ -710,6 +905,121 @@ export default function Adm() {
             </div>
           )}
         </div>
+
+        {/* =====================================================
+            SEÇÃO: GERENCIAMENTO DE CLIENTES
+        ===================================================== */}
+        <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden mt-8">
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <UserCog className="w-7 h-7 text-cyan-400" />
+              <div>
+                <h2 className="text-2xl font-bold text-white">Gerenciar Clientes</h2>
+                <p className="text-gray-400 mt-1">Busque por email ou nome para resetar senha ou excluir</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {/* Campo de busca */}
+            <div className="flex gap-3 mb-6">
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={buscaCliente}
+                  onChange={(e) => setBuscaCliente(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && buscarClientes()}
+                  placeholder="Digite o email ou nome do cliente..."
+                  className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-lg placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                />
+              </div>
+              <button
+                onClick={buscarClientes}
+                disabled={loadingClientes || !buscaCliente.trim()}
+                className="px-6 py-4 bg-cyan-600 text-white font-bold text-lg rounded-xl hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loadingClientes ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Search className="w-5 h-5" />
+                )}
+                <span>Buscar</span>
+              </button>
+            </div>
+
+            {/* Toast de sucesso */}
+            {sucessoCliente && (
+              <div className="mb-4 p-4 bg-green-600 text-white rounded-xl flex items-center gap-3">
+                <Check className="w-6 h-6" />
+                <span className="text-lg font-medium">{sucessoCliente}</span>
+              </div>
+            )}
+
+            {/* Resultados da busca */}
+            {clientes.length > 0 ? (
+              <div className="space-y-3">
+                {clientes.map((cliente) => (
+                  <div
+                    key={cliente.id}
+                    className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-full ${cliente.tipo_usuario === 'locador' ? 'bg-purple-500/20' : 'bg-cyan-500/20'}`}>
+                        <Users className={`w-6 h-6 ${cliente.tipo_usuario === 'locador' ? 'text-purple-400' : 'text-cyan-400'}`} />
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-lg">{cliente.nome}</p>
+                        <p className="text-gray-400 text-base">{cliente.email}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${cliente.tipo_usuario === 'locador' ? 'bg-purple-500/30 text-purple-300' : 'bg-cyan-500/30 text-cyan-300'}`}>
+                            {cliente.tipo_usuario === 'locador' ? 'Locador' : 'Locatário'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {/* Botão Resetar Senha */}
+                      <button
+                        onClick={() => abrirModalReset(cliente)}
+                        className="px-4 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-colors flex items-center gap-2"
+                      >
+                        <KeyRound className="w-5 h-5" />
+                        <span>Resetar Senha</span>
+                      </button>
+
+                      {/* Botão Excluir */}
+                      <button
+                        onClick={() => excluirCliente(cliente)}
+                        disabled={excluindoCliente === cliente.id}
+                        className="px-4 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {excluindoCliente === cliente.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-5 h-5" />
+                        )}
+                        <span>Excluir</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : buscaCliente && !loadingClientes ? (
+              <div className="text-center py-8 text-gray-400">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="text-lg">Nenhum cliente encontrado</p>
+                <p className="text-sm mt-1">Tente buscar por outro email ou nome</p>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="text-lg">Busque um cliente pelo email ou nome</p>
+              </div>
+            )}
+          </div>
+        </div>
       </main>
 
       {/* Modal de Detalhes do Locador */}
@@ -874,6 +1184,92 @@ export default function Adm() {
                   Erro ao carregar detalhes
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reset de Senha */}
+      {modalResetAberto && clienteParaReset && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl border border-white/10 w-full max-w-md">
+            {/* Header */}
+            <div className="p-6 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-amber-600/20 rounded-full flex items-center justify-center">
+                  <KeyRound className="w-6 h-6 text-amber-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Resetar Senha</h2>
+                  <p className="text-gray-400 text-sm">{clienteParaReset.nome}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-gray-400 text-sm mb-1">Email do cliente:</p>
+                <p className="text-white font-medium">{clienteParaReset.email}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Nova Senha
+                </label>
+                <div className="relative">
+                  <input
+                    type={mostrarSenhaInput ? 'text' : 'password'}
+                    value={novaSenhaInput}
+                    onChange={(e) => setNovaSenhaInput(e.target.value)}
+                    placeholder="Digite a nova senha (mín. 6 caracteres)"
+                    className="w-full px-4 py-3 bg-slate-800 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenhaInput(!mostrarSenhaInput)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  >
+                    {mostrarSenhaInput ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                <p className="text-gray-500 text-xs mt-1">
+                  O cliente será deslogado e precisará usar esta senha para entrar novamente.
+                </p>
+              </div>
+
+              <div className="bg-amber-600/10 border border-amber-500/30 rounded-xl p-3">
+                <p className="text-amber-400 text-sm">
+                  <strong>Atenção:</strong> Ao confirmar, o cliente será deslogado automaticamente e ao fazer login novamente com esta senha, será obrigado a criar uma nova.
+                </p>
+              </div>
+            </div>
+
+            {/* Botões */}
+            <div className="p-6 border-t border-white/10 flex gap-3">
+              <button
+                onClick={fecharModalReset}
+                className="flex-1 px-4 py-3 bg-slate-700 text-white font-semibold rounded-xl hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executarResetSenha}
+                disabled={!novaSenhaInput || novaSenhaInput.length < 6 || resetandoSenha === clienteParaReset.id}
+                className="flex-1 px-4 py-3 bg-amber-600 text-white font-semibold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {resetandoSenha === clienteParaReset.id ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Resetando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>Confirmar</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

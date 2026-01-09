@@ -743,6 +743,11 @@ export default function ChatPage() {
     handleAceitarProposta(chat.proposta.id)
   }
 
+  const handleRecusarPropostaHeader = () => {
+    if (!chat?.proposta?.id) return
+    handleRecusarProposta(chat.proposta.id)
+  }
+
   const formatarHora = (dateStr: string) => {
     return new Date(dateStr).toLocaleTimeString('pt-BR', {
       hour: '2-digit',
@@ -810,10 +815,9 @@ export default function ChatPage() {
   // Aparece quando: é locador E (não tem proposta OU proposta não está aceita)
   const podeGerarProposta = isLocador && (!statusProposta || statusProposta !== 'aceita')
 
-  // BOTÃO 2: Enviar Endereço (LOCATÁRIO) - CORREÇÃO CRÍTICA
+  // BOTÃO 2: Aceitar/Recusar Proposta (LOCATÁRIO)
   // Aparece quando: é locatário E proposta está pendente
-  // IMPORTANTE: Mesmo que statusProposta seja undefined, se existir chat.proposta, considera como pendente
-  const podeEnviarEndereco = isLocatario && (statusProposta === 'pendente' || (chat?.proposta && !statusProposta))
+  const podeResponderProposta = isLocatario && statusProposta === 'pendente'
 
   // BOTÃO 3: Confirmar Entrega (LOCADOR) - FORÇADO PELO SENIOR DAORA
   // Aparece quando: é locador E proposta aceita E tem endereço
@@ -827,9 +831,9 @@ export default function ChatPage() {
 
   console.log('🎯 BOTÕES QUE DEVEM APARECER:')
   if (podeGerarProposta) console.log('  🟠 Gerar Proposta (LOCADOR)')
-  if (podeEnviarEndereco) console.log('  🟠 Enviar Endereço (LOCATÁRIO)')
+  if (podeResponderProposta) console.log('  🟠 Aceitar/Recusar Proposta (LOCATÁRIO)')
   if (podeConfirmarEntrega) console.log('  🟢 Confirmar Entrega (LOCADOR)')
-  if (!podeGerarProposta && !podeEnviarEndereco && !podeConfirmarEntrega) {
+  if (!podeGerarProposta && !podeResponderProposta && !podeConfirmarEntrega) {
     console.log('  ⚠️ NENHUM')
   }
   console.log('═══════════════════════════════════════════════════════')
@@ -897,20 +901,34 @@ export default function ChatPage() {
             </button>
           )}
 
-          {/* BOTÃO 2: Enviar Endereço (LOCATÁRIO) - DESTAQUE LARANJA OLX */}
-          {podeEnviarEndereco && (
-            <button
-              onClick={handleAceitarPropostaHeader}
-              disabled={respondendoProposta}
-              className="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white text-lg font-bold rounded-xl hover:bg-orange-600 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {respondendoProposta ? (
-                <Loader2 className="w-6 h-6 animate-spin" />
-              ) : (
-                <MapPin className="w-6 h-6" />
-              )}
-              {respondendoProposta ? 'Enviando...' : 'Enviar Endereço para Entrega'}
-            </button>
+          {/* BOTÃO 2: Aceitar/Recusar Proposta (LOCATÁRIO) */}
+          {podeResponderProposta && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAceitarPropostaHeader}
+                disabled={respondendoProposta}
+                className="flex items-center gap-2 px-5 py-3 bg-green-600 text-white text-lg font-bold rounded-xl hover:bg-green-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {respondendoProposta ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Check className="w-5 h-5" />
+                )}
+                Aceitar
+              </button>
+              <button
+                onClick={handleRecusarPropostaHeader}
+                disabled={respondendoProposta}
+                className="flex items-center gap-2 px-5 py-3 bg-red-600 text-white text-lg font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {respondendoProposta ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <X className="w-5 h-5" />
+                )}
+                Recusar
+              </button>
+            </div>
           )}
 
           {/* BOTÃO 3: Confirmar Entrega (LOCADOR) */}

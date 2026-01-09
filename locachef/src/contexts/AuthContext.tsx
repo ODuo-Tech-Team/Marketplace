@@ -22,6 +22,8 @@ export interface Profile {
   bairro?: string | null
   cidade?: string | null
   uf?: string | null
+  // Flag para senha temporária (reset feito pelo admin)
+  senha_temporaria?: boolean
 }
 
 interface AuthContextType {
@@ -29,6 +31,10 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   signOut: () => Promise<void>
+  // Função para atualizar senha e limpar flag de senha temporária
+  atualizarSenha: (novaSenha: string) => Promise<{ success: boolean; error?: string }>
+  // Função para recarregar profile
+  recarregarProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -109,9 +115,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
 
-        console.log('[Auth] Estado mudou:', _event)
+        console.log('[Auth] Estado mudou:', _event, session?.user?.email)
+
         if (session?.user) {
           setUser(session.user)
+          // Sempre busca o profile fresco do banco no login
+          console.log('[Auth] Buscando profile fresco para:', session.user.id)
           await fetchProfile(session.user.id)
         } else {
           setUser(null)
@@ -129,8 +138,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
   }
 
+  // Atualiza a senha do usuário e remove a flag de senha temporária
+  const atualizarSenha = async (novaSenha: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!user) {
+        return { success: false, error: 'Usuário não autenticado' }
+      }
+
+      // 1. Atualiza a senha no Supabase Auth
+      const { error: authError } = await supabase.auth.updateUser({
+        password: novaSenha
+      })
+
+      if (authError) {
+        console.error('[Auth] Erro ao atualizar senha:', authError)
+        // Traduz mensagens de erro do Supabase para português
+        let errorMessage = authError.message
+
+        // Se a senha não pode ser igual à anterior, significa que a senha já foi trocada
+        // (usuário pode ter recarregado a página no meio do processo)
+        // Nesse caso, limpa a flag e deixa o usuário continuar
+        if (errorMessage.includes('different from the old password')) {
+          console.log('[Auth] Senha já foi trocada anteriormente, limpando flag...')
+          // Limpa a flag no banco
+          await supabase
+            .from('profiles')
+            .update({ senha_temporaria: false })
+            .eq('id', user.id)
+          // Atualiza o profile local
+          if (profile) {
+            setProfile({ ...profile, senha_temporaria: false })
+          }
+          // Retorna sucesso - o modal vai fechar
+          return { success: true }
+        } else if (errorMessage.includes('at least 6 characters')) {
+          errorMessage = 'A senha deve ter pelo menos 6 caracteres'
+        } else if (errorMessage.includes('Password')) {
+          errorMessage = 'Erro ao atualizar senha. Tente novamente.'
+        }
+        return { success: false, error: errorMessage }
+      }
+
+      // 2. Remove a flag de senha temporária no profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ senha_temporaria: false })
+        .eq('id', user.id)
+
+      if (profileError) {
+        console.error('[Auth] Erro ao limpar flag senha_temporaria:', profileError)
+        // Senha foi atualizada, mas flag não foi limpa - ainda é sucesso
+      }
+
+      // 3. Atualiza o profile local
+      if (profile) {
+        setProfile({ ...profile, senha_temporaria: false })
+      }
+
+      console.log('[Auth] Senha atualizada com sucesso')
+      return { success: true }
+
+    } catch (err) {
+      console.error('[Auth] Erro inesperado ao atualizar senha:', err)
+      return { success: false, error: 'Erro inesperado ao atualizar senha' }
+    }
+  }
+
+  // Recarrega o profile do usuário atual
+  const recarregarProfile = async () => {
+    if (user) {
+      await fetchProfile(user.id)
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, atualizarSenha, recarregarProfile }}>
       {children}
     </AuthContext.Provider>
   )

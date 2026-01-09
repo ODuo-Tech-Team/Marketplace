@@ -816,12 +816,36 @@ export default function ChatSplitPage() {
       )
       .subscribe()
 
+    // Listener para propostas - escuta INSERT e UPDATE
     const propostasChannel: RealtimeChannel = supabase
       .channel(`propostas-chat-${chatId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'propostas' },
+        async (payload) => {
+          if (!mountedRef.current) return
+          console.log('[ChatSplitPage] Nova proposta detectada via realtime:', payload)
+          // Recarrega o chat completo para pegar a nova proposta
+          await carregarChat(chatId)
+        }
+      )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'propostas' },
         async (payload) => {
           if (!mountedRef.current) return
-          const propostaAtualizada = payload.new as Proposta
+          console.log('[ChatSplitPage] Proposta atualizada via realtime:', payload)
+          // Recarrega o chat para refletir a atualização
+          await carregarChat(chatId)
+        }
+      )
+      .subscribe()
+
+    // Listener para atualizações no chat (quando proposta_id é atualizado)
+    const chatUpdateChannel: RealtimeChannel = supabase
+      .channel(`chat-update-${chatId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chats', filter: `id=eq.${chatId}` },
+        async (payload) => {
+          if (!mountedRef.current) return
+          console.log('[ChatSplitPage] Chat atualizado via realtime:', payload)
+          // Recarrega o chat completo
+          await carregarChat(chatId)
         }
       )
       .subscribe()
@@ -829,6 +853,7 @@ export default function ChatSplitPage() {
     return () => {
       supabase.removeChannel(channel)
       supabase.removeChannel(propostasChannel)
+      supabase.removeChannel(chatUpdateChannel)
     }
   }, [chatId])
 

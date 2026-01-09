@@ -119,10 +119,8 @@ function AppRoutes() {
 function App() {
   return (
     <BrowserRouter>
-      {}
-      <AuthProvider> 
-        {}
-        <AppProvider> 
+      <AuthProvider>
+        <AppProvider>
           <AppRoutes />
         </AppProvider>
       </AuthProvider>

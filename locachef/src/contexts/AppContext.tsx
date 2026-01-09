@@ -1214,9 +1214,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return []
       }
 
+      // Busca propostas aceitas que NÃO foram entregues ainda
+      // status_entrega pode ser null (não entregue) ou 'ENTREGUE' (já entregue)
       const { data: propostas, error: propostasError } = await supabase
         .from('propostas')
-        .select('id, equipamento_id, usuario_id, status, endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf, created_at')
+        .select('id, equipamento_id, usuario_id, status, status_entrega, endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf, created_at')
         .in('id', propostaIds)
         .eq('status', 'aceita')
 
@@ -1230,10 +1232,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return []
       }
 
-      console.log('[fetchEntregasPendentes] Propostas aceitas encontradas:', propostas.length)
+      // Filtra apenas propostas que NÃO foram entregues
+      const propostasPendentes = propostas.filter(p => {
+        const statusEntrega = (p as { status_entrega?: string }).status_entrega
+        return !statusEntrega || statusEntrega !== 'ENTREGUE'
+      })
 
-      // 3. Busca equipamentos
-      const equipamentoIds = [...new Set(propostas.map(p => p.equipamento_id).filter(Boolean))]
+      console.log('[fetchEntregasPendentes] Propostas aceitas encontradas:', propostas.length, '| Pendentes de entrega:', propostasPendentes.length)
+
+      if (propostasPendentes.length === 0) {
+        console.log('[fetchEntregasPendentes] Todas as propostas já foram entregues')
+        return []
+      }
+
+      // 3. Busca equipamentos das propostas pendentes
+      const equipamentoIds = [...new Set(propostasPendentes.map(p => p.equipamento_id).filter(Boolean))]
       const { data: equipamentos } = await supabase
         .from('equipamentos')
         .select('id, nome')
@@ -1242,7 +1255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const equipamentosMap = new Map((equipamentos || []).map(e => [e.id, e.nome]))
 
       // 4. Busca clientes (locatários) - usuario_id na proposta é o locatário
-      const clienteIds = [...new Set(propostas.map(p => p.usuario_id).filter(Boolean))]
+      const clienteIds = [...new Set(propostasPendentes.map(p => p.usuario_id).filter(Boolean))]
       const { data: clientes, error: clientesError } = await supabase
         .from('profiles')
         .select('id, full_name, nome_empresa, email')
@@ -1262,7 +1275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // 5. Monta a lista de entregas pendentes
       // ESTRUTURA REAL: só tem endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf
-      const entregas: EntregaPendente[] = propostas.map(proposta => {
+      const entregas: EntregaPendente[] = propostasPendentes.map(proposta => {
         return {
           proposta_id: proposta.id,
           equipamento_id: proposta.equipamento_id,
@@ -1305,7 +1318,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.warn('[marcarComoEntregue] RPC não disponível, usando fallback:', error.message)
 
-        // ESTRUTURA REAL: equipamentos só tem 'status' (DISPONIVEL, OCUPADO, etc)
+        // 1. Atualiza proposta com status_entrega = ENTREGUE
+        const { error: propostaError } = await supabase
+          .from('propostas')
+          .update({ status_entrega: 'ENTREGUE' })
+          .eq('id', propostaId)
+
+        if (propostaError) {
+          console.error('[marcarComoEntregue] Erro ao atualizar proposta:', propostaError)
+          return { success: false, error: propostaError.message }
+        }
+
+        // 2. Atualiza equipamento como OCUPADO
         const { error: equipamentoError } = await supabase
           .from('equipamentos')
           .update({ status: 'OCUPADO' })  // Marca como ocupado (em uso)
