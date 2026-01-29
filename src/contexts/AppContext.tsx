@@ -9,7 +9,7 @@ export interface Equipamento {
   descricao: string | null
   preco_diaria: number
   fotos: string[] | null  // ARRAY no banco - única forma de imagem
-  status: string | null   // Campo real no banco (não 'disponivel') - 'DISPONIVEL', 'LOCADO', 'OCUPADO'
+  status: string | null   // Campo real no banco - 'DISPONIVEL', 'RESERVADO', 'EM_TRANSITO', 'OCUPADO'
   categoria: string | null
   cidade: string | null
   uf: string | null
@@ -22,13 +22,31 @@ export interface Equipamento {
   locador_nome_empresa?: string | null
   locador_?: string | null
   locador_full_name?: string | null
+  locador_verificado?: boolean | null    // Locador verificado pelo admin (selo dourado)
+  // Novos campos para Linha Amarela
+  ano?: number | null                    // Ano de fabricação
+  horimetro_atual?: number | null        // Horímetro em horas
+  peso_operacional?: number | null       // Peso em toneladas
+  selo_verificado?: boolean | null       // Badge de verificação (legado)
+  // Campos Light Equipment
+  voltagem?: string | null               // '110v' | '220v' | 'Bivolt' | 'Bateria'
+  // Destaque (admin)
+  destaque?: boolean | null              // Equipamento promovido pelo admin
 }
 
+// Status do equipamento no ciclo de vida
+export const EQUIPMENT_STATUS = {
+  DISPONIVEL: 'DISPONIVEL',
+  RESERVADO: 'RESERVADO',      // Proposta aceita, aguardando despacho
+  EM_TRANSITO: 'EM_TRANSITO',  // Locador despachou, a caminho do cliente
+  OCUPADO: 'OCUPADO',          // Cliente confirmou recebimento, em uso
+} as const
+
+export type EquipmentStatus = typeof EQUIPMENT_STATUS[keyof typeof EQUIPMENT_STATUS]
+
 // Helper para verificar se equipamento está disponível
-// ESTRUTURA REAL: usa campo 'status' (não 'disponivel' ou 'status_locacao')
 export const isEquipamentoDisponivel = (eq: Equipamento): boolean => {
-  // Status pode ser 'DISPONIVEL', 'LOCADO', etc
-  if (!eq.status) return true // Se não tem status, considera disponível
+  if (!eq.status) return true
   return eq.status === 'DISPONIVEL' || eq.status === 'disponivel'
 }
 
@@ -67,6 +85,13 @@ export interface NovoEquipamento {
   cidade: string
   uf: string
   fotos?: string[]  // Array de URLs das fotos (multi-upload)
+  // Campos técnicos opcionais para Linha Amarela
+  ano?: number
+  horimetro_atual?: number
+  peso_operacional?: number
+  selo_verificado?: boolean  // Admin pode marcar como verificado
+  // Campos Light Equipment
+  voltagem?: string           // '110v' | '220v' | 'Bivolt' | 'Bateria'
 }
 
 // Lista de estados brasileiros
@@ -119,18 +144,33 @@ export interface Proposta {
   id: string
   equipamento_id: string
   usuario_id: string  // ID do locatário que fez a proposta
-  status: string      // 'pendente' | 'aceita' | 'recusada' etc
+  status: string      // 'pendente' | 'aceita' | 'recusada' | 'finalizada'
   created_at: string
   // Dados da proposta (valor e frete)
   valor_diaria?: number | null
   quantidade_dias?: number | null
   valor_frete?: number | null
   valor_total?: number | null
-  // Endereço de entrega - RAIO-X confirma estes campos
+  desconto?: number | null
+  taxa_extra?: number | null
+  // Datas de locação
+  data_inicio?: string | null
+  data_fim?: string | null
+  // Status de entrega
+  status_entrega?: string | null  // 'ENTREGUE' ou null
+  // Endereço de entrega
   endereco_cep?: string | null
   endereco_logradouro?: string | null
   endereco_cidade?: string | null
   endereco_uf?: string | null
+  // Campos Linha Amarela (Heavy Equipment)
+  horimetro_saida?: number | null
+  horimetro_saida_foto?: string | null
+  horimetro_chegada?: number | null
+  horimetro_chegada_foto?: string | null
+  com_operador?: boolean | null
+  valor_operador_diaria?: number | null
+  tipo_veiculo_transporte?: string | null
 }
 
 // Endereço de entrega - RAIO-X mostra apenas: endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf
@@ -141,13 +181,43 @@ export interface EnderecoEntrega {
   uf: string
 }
 
-// Nova proposta - banco só tem equipamento_id e usuario_id
+// Nova proposta - dados enviados pelo locador
 export interface NovaProposta {
   equipamento_id: string
   valor_diaria?: number
   quantidade_dias?: number
   valor_frete?: number
   valor_total?: number
+  desconto?: number
+  taxa_extra?: number
+  data_inicio?: string
+  data_fim?: string
+  // Campos Linha Amarela (Heavy Equipment)
+  horimetro_saida?: number
+  horimetro_saida_foto?: string
+  com_operador?: boolean
+  valor_operador_diaria?: number
+  tipo_veiculo_transporte?: string
+}
+
+// Consumível (item vendável com equipamento leve)
+export interface Consumivel {
+  id: string
+  equipamento_id: string
+  nome: string
+  preco: number
+  ativo: boolean
+  created_at: string
+}
+
+// Consumível selecionado em uma proposta
+export interface PropostaConsumivel {
+  id: string
+  proposta_id: string
+  consumivel_id: string
+  quantidade: number
+  preco_unitario: number
+  nome?: string // joined from consumiveis
 }
 
 // Interface para entregas pendentes (propostas aceitas)
@@ -168,6 +238,15 @@ export interface EntregaPendente {
 }
 
 export const CATEGORIAS = [
+  // Linha Amarela (Máquinas Pesadas)
+  'Escavadeira Hidráulica',
+  'Retroescavadeira',
+  'Pá Carregadeira',
+  'Motoniveladora',
+  'Rolo Compactador',
+  'Trator de Esteira',
+  'Mini Escavadeira',
+  // Equipamentos de Construção
   'Betoneiras',
   'Andaimes',
   'Ferramentas Elétricas',
@@ -177,8 +256,33 @@ export const CATEGORIAS = [
   'Outros'
 ] as const
 
+// Categorias que são de Linha Amarela (requerem dados técnicos)
+export const CATEGORIAS_LINHA_AMARELA = [
+  'Escavadeira Hidráulica',
+  'Retroescavadeira',
+  'Pá Carregadeira',
+  'Motoniveladora',
+  'Rolo Compactador',
+  'Trator de Esteira',
+  'Mini Escavadeira'
+] as const
+
+// Helper para verificar se uma categoria é Linha Amarela
+export const isLinhaAmarela = (categoria: string): boolean => {
+  return CATEGORIAS_LINHA_AMARELA.includes(categoria as any)
+}
+
 // Mapa de cores industriais por categoria
 export const CATEGORIA_CORES: Record<string, string> = {
+  // Linha Amarela (Máquinas Pesadas) - Tons de Amarelo/Laranja
+  'Escavadeira Hidráulica': 'bg-yellow-600',
+  'Retroescavadeira': 'bg-amber-700',
+  'Pá Carregadeira': 'bg-yellow-500',
+  'Motoniveladora': 'bg-orange-600',
+  'Rolo Compactador': 'bg-zinc-700',
+  'Trator de Esteira': 'bg-slate-600',
+  'Mini Escavadeira': 'bg-yellow-700',
+  // Equipamentos de Construção - Cores Variadas
   'Betoneiras': 'bg-amber-700',
   'Andaimes': 'bg-slate-600',
   'Ferramentas Elétricas': 'bg-yellow-600',
@@ -187,6 +291,12 @@ export const CATEGORIA_CORES: Record<string, string> = {
   'Compactadores': 'bg-stone-600',
   'Outros': 'bg-gray-600'
 }
+
+// Tipos de veículo para transporte de Linha Amarela
+export const TIPOS_VEICULO_TRANSPORTE = ['Caminhão Prancha', 'Caminhão Munck', 'Reboque'] as const
+
+// Voltagens para equipamentos leves
+export const VOLTAGENS = ['110v', '220v', 'Bivolt', 'Bateria'] as const
 
 // Status válidos para chat aberto (case-insensitive)
 export const STATUS_CHAT_ABERTO = ['aberto', 'ativo'] as const
@@ -236,14 +346,26 @@ interface AppContextType {
   // Funções para painel de entregas
   fetchEntregasPendentes: (locadorId: string) => Promise<EntregaPendente[]>
   marcarComoEntregue: (propostaId: string, equipamentoId: string) => Promise<{ success: boolean; error?: string }>
+  // Função para despachar equipamento (RESERVADO → EM_TRANSITO)
+  despacharEquipamento: (propostaId: string, equipamentoId: string) => Promise<{ success: boolean; error?: string }>
   // Função para confirmar devolução/retorno de equipamento
-  confirmarRetorno: (propostaId: string, equipamentoId: string) => Promise<{ success: boolean; error?: string }>
+  confirmarRetorno: (propostaId: string, equipamentoId: string, horimetroDados?: { horimetro_chegada?: number; horimetro_chegada_foto?: string }) => Promise<{ success: boolean; error?: string }>
+  // Função para editar proposta pendente
+  editarProposta: (propostaId: string, dados: Partial<NovaProposta>) => Promise<{ success: boolean; error?: string }>
   // Função para upload de imagens
   uploadImagens: (files: File[], locadorId: string) => Promise<{ urls: string[]; error?: string }>
   // Função para deletar equipamento
   deletarEquipamento: (equipamentoId: string, locadorId: string) => Promise<{ success: boolean; error?: string }>
   // Função para atualizar equipamento
   atualizarEquipamento: (equipamentoId: string, dados: NovoEquipamento, locadorId: string) => Promise<{ success: boolean; error?: string }>
+  // Funções de consumíveis
+  fetchConsumiveis: (equipamentoId: string) => Promise<Consumivel[]>
+  addConsumivel: (equipamentoId: string, nome: string, preco: number) => Promise<{ success: boolean; error?: string }>
+  removeConsumivel: (consumivelId: string) => Promise<{ success: boolean; error?: string }>
+  salvarConsumiveisProposta: (propostaId: string, items: { consumivel_id: string; quantidade: number; preco_unitario: number }[]) => Promise<{ success: boolean; error?: string }>
+  fetchConsumiveisProposta: (propostaId: string) => Promise<PropostaConsumivel[]>
+  // Admin: toggle destaque
+  toggleDestaque: (equipamentoId: string, destaque: boolean) => Promise<{ success: boolean; error?: string }>
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -261,13 +383,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       // Busca equipamentos com join no perfil do locador
       // ESTRUTURA REAL: equipamentos tem 'status' (não 'disponivel')
+      // Ordena por created_at primeiro - a ordenação por verificado é feita no frontend
+      // pois o Supabase não suporta order em campos de join
       const { data, error } = await supabase
         .from('equipamentos')
         .select(`
           *,
           locador:profiles!locador_id(
             full_name,
-            nome_empresa
+            nome_empresa,
+            verificado
           )
         `)
         .in('status', ['DISPONIVEL', 'disponivel'])
@@ -290,11 +415,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         // Mapeia os dados para incluir campos do locador no formato esperado
         const equipamentosComLocador = (data || []).map(eq => {
-          const locador = eq.locador as { full_name?: string; nome_empresa?: string } | null
+          const locador = eq.locador as { full_name?: string; nome_empresa?: string; verificado?: boolean } | null
           return {
             ...eq,
             locador_nome_empresa: locador?.nome_empresa || null,
             locador_full_name: locador?.full_name || null,
+            locador_verificado: locador?.verificado || false, // Selo dourado do locador
             locador: undefined // Remove o objeto aninhado
           }
         })
@@ -351,7 +477,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           *,
           locador:profiles!locador_id(
             full_name,
-            nome_empresa
+            nome_empresa,
+            verificado
           )
         `)
         .eq('locador_id', locadorId)
@@ -370,11 +497,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Mapeia para incluir campos do locador
       return (data || []).map(eq => {
-        const locador = eq.locador as { full_name?: string; nome_empresa?: string } | null
+        const locador = eq.locador as { full_name?: string; nome_empresa?: string; verificado?: boolean } | null
         return {
           ...eq,
           locador_nome_empresa: locador?.nome_empresa || null,
           locador_full_name: locador?.full_name || null,
+          locador_verificado: locador?.verificado || false,
           locador: undefined
         }
       })
@@ -400,7 +528,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         uf: dados.uf,
         locador_id: locadorId,
         fotos: dados.fotos || null,
-        status: 'DISPONIVEL'  // Campo real no banco
+        status: 'DISPONIVEL',  // Campo real no banco
+        // Novos campos técnicos para Linha Amarela
+        ano: dados.ano || null,
+        horimetro_atual: dados.horimetro_atual || null,
+        peso_operacional: dados.peso_operacional || null,
+        selo_verificado: false,  // Apenas admin pode marcar como true
+        // Campos Light Equipment
+        voltagem: dados.voltagem || null
       })
 
       if (error) {
@@ -494,7 +629,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
           propostaData = prop
         }
 
-        return { ...chatData, equipamento: eqData, proposta: propostaData || undefined } as Chat
+        // Busca nomes no fallback também
+        const userIdsFallback = [chatData.locador_id, chatData.locatario_id].filter(Boolean)
+        let locadorNomeFallback: string | undefined
+        let locatarioNomeFallback: string | undefined
+
+        if (userIdsFallback.length > 0) {
+          const { data: profilesDataFb } = await supabase
+            .from('profiles')
+            .select('id, full_name, nome_empresa, email')
+            .in('id', userIdsFallback)
+
+          if (profilesDataFb) {
+            for (const p of profilesDataFb) {
+              const nome = p.nome_empresa || p.full_name || p.email || 'Usuário'
+              if (p.id === chatData.locador_id) locadorNomeFallback = nome
+              if (p.id === chatData.locatario_id) locatarioNomeFallback = nome
+            }
+          }
+        }
+
+        return {
+          ...chatData,
+          equipamento: eqData,
+          proposta: propostaData || undefined,
+          locador_nome: locadorNomeFallback,
+          locatario_nome: locatarioNomeFallback
+        } as Chat
       }
 
       if (!data) {
@@ -513,47 +674,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
         propostaData = prop
       } else if (data.equipamento_id) {
         // Fallback: busca por equipamento_id e locatario_id
+        // Inclui 'finalizada' para manter status correto após devolução
         const { data: prop } = await supabase
           .from('propostas')
           .select('*')
           .eq('equipamento_id', data.equipamento_id)
           .eq('usuario_id', data.locatario_id)
+          .in('status', ['pendente', 'aceita', 'finalizada'])
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
         propostaData = prop
       }
 
-      // Adiciona a proposta ao chat se encontrou
-      const chatComProposta = {
+      // Busca nomes do locador e locatário para exibição no header
+      // Prioriza nome_empresa para locadores, full_name para clientes
+      const userIds = [data.locador_id, data.locatario_id].filter(Boolean)
+      let locadorNome: string | undefined
+      let locatarioNome: string | undefined
+
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name, nome_empresa, email')
+          .in('id', userIds)
+
+        if (profilesData) {
+          for (const p of profilesData) {
+            const nome = p.nome_empresa || p.full_name || p.email || 'Usuário'
+            if (p.id === data.locador_id) {
+              locadorNome = nome
+            }
+            if (p.id === data.locatario_id) {
+              locatarioNome = nome
+            }
+          }
+        }
+      }
+
+      // Adiciona a proposta e nomes ao chat
+      const chatComDados = {
         ...data,
-        proposta: propostaData || undefined
+        proposta: propostaData || undefined,
+        locador_nome: locadorNome,
+        locatario_nome: locatarioNome
       } as Chat
 
-      console.log('═══════════════════════════════════════════════════════')
-      console.log('[fetchChat] RESULTADO DA BUSCA:')
-      console.log('═══════════════════════════════════════════════════════')
-      console.log('Chat ID:', chatId)
-      console.log('Equipamento ID:', data.equipamento_id)
-      console.log('Locatário ID:', data.locatario_id)
-      console.log('Proposta ID (do chat):', data.proposta_id)
-      console.log('Proposta encontrada?', !!propostaData)
-      if (propostaData) {
-        console.log('✅ PROPOSTA:', {
-          id: propostaData.id,
-          status: propostaData.status,
-          equipamento_id: propostaData.equipamento_id,
-          usuario_id: propostaData.usuario_id,
-          valor_total: propostaData.valor_total,
-          temEndereco: !!propostaData.endereco_logradouro
-        })
-      } else {
-        console.log('❌ NENHUMA PROPOSTA ENCONTRADA PARA ESTE CHAT')
-        console.log('   Verifique se o locador já criou uma proposta')
-      }
-      console.log('═══════════════════════════════════════════════════════')
-
-      return chatComProposta
+      return chatComDados
     } catch (err) {
       console.error('[fetchChat] Erro inesperado:', err)
       return null
@@ -576,7 +743,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Se não existe, tenta criar com dados mínimos
       if (checkError?.code === 'PGRST116') { // Not found
-        console.log('[garantirPerfilExiste] Perfil não encontrado, criando...')
 
         // Busca dados do usuário autenticado
         const { data: { user } } = await supabase.auth.getUser()
@@ -594,14 +760,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (insertError) {
           // Se erro de duplicação, perfil já existe (race condition)
           if (insertError.code === '23505') {
-            console.log('[garantirPerfilExiste] Perfil já existe (race condition)')
             return true
           }
           console.error('[garantirPerfilExiste] Erro ao criar perfil:', insertError)
           return false
         }
 
-        console.log('[garantirPerfilExiste] Perfil criado com sucesso')
         return true
       }
 
@@ -670,7 +834,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: chatError?.message || 'Erro ao criar chat' }
       }
 
-      // Insere a primeira mensagem - RAIO-X: usa sender_id e texto
+      // Insere a primeira mensagem - APENAS a mensagem do cliente, SEM endereço
+      // O endereço já foi salvo nas colunas endereco_entrega_* do chat
       const { error: msgError } = await supabase.from('mensagens').insert({
         chat_id: chatData.id,
         sender_id: locatarioId,
@@ -682,6 +847,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: msgError.message }
       }
 
+      // Verificação GARANTIDA: aguarda até confirmar que o chat existe no banco
+      // Retry loop para garantir que o chat está disponível antes do redirect
+      const MAX_VERIFICACOES = 5
+      const DELAY_VERIFICACAO = 400
+
+      for (let tentativa = 1; tentativa <= MAX_VERIFICACOES; tentativa++) {
+        const { data: verificacao, error: verifError } = await supabase
+          .from('chats')
+          .select('id, equipamento_id')
+          .eq('id', chatData.id)
+          .single()
+
+        if (verificacao && !verifError) {
+          return { success: true, chatId: chatData.id }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, DELAY_VERIFICACAO))
+      }
+
+      // Se chegou aqui, o chat foi criado mas não conseguimos verificar
+      // Retorna sucesso mesmo assim pois o insert retornou OK
+      console.warn('[iniciarChat] Chat criado mas verificação incerta - prosseguindo')
       return { success: true, chatId: chatData.id }
     } catch {
       return { success: false, error: 'Erro inesperado ao iniciar chat' }
@@ -854,8 +1041,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dados: NovaProposta
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log('[enviarProposta] Criando proposta com equipamento_id:', dados.equipamento_id)
-
       // Busca o locatario_id do chat para vincular à proposta
       const { data: chatData, error: chatFetchError } = await supabase
         .from('chats')
@@ -880,6 +1065,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (dados.quantidade_dias !== undefined) propostaInsert.quantidade_dias = dados.quantidade_dias
       if (dados.valor_frete !== undefined) propostaInsert.valor_frete = dados.valor_frete
       if (dados.valor_total !== undefined) propostaInsert.valor_total = dados.valor_total
+      if (dados.desconto !== undefined) propostaInsert.desconto = dados.desconto
+      if (dados.taxa_extra !== undefined) propostaInsert.taxa_extra = dados.taxa_extra
+      if (dados.data_inicio) propostaInsert.data_inicio = dados.data_inicio
+      if (dados.data_fim) propostaInsert.data_fim = dados.data_fim
+      // Campos Linha Amarela
+      if (dados.horimetro_saida !== undefined) propostaInsert.horimetro_saida = dados.horimetro_saida
+      if (dados.horimetro_saida_foto) propostaInsert.horimetro_saida_foto = dados.horimetro_saida_foto
+      if (dados.com_operador !== undefined) propostaInsert.com_operador = dados.com_operador
+      if (dados.valor_operador_diaria !== undefined) propostaInsert.valor_operador_diaria = dados.valor_operador_diaria
+      if (dados.tipo_veiculo_transporte) propostaInsert.tipo_veiculo_transporte = dados.tipo_veiculo_transporte
 
       const { data: propostaData, error: propostaError } = await supabase
         .from('propostas')
@@ -895,8 +1090,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!propostaData) {
         return { success: false, error: 'Erro ao criar proposta: dados não retornados' }
       }
-
-      console.log('[enviarProposta] Proposta criada com ID:', propostaData.id)
 
       // Atualiza o chat para vincular à proposta (chats.proposta_id)
       const { error: chatError } = await supabase
@@ -973,8 +1166,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     userId: string, // ID do usuário logado (locatário que aceita/recusa)
     endereco?: EnderecoEntrega
   ): Promise<{ success: boolean; error?: string }> => {
-    console.log('[responderProposta] Iniciando via RPC executar_aceite_proposta')
-
     try {
       // Busca o equipamento_id do chat
       const { data: chatData, error: chatError } = await supabase
@@ -1009,8 +1200,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         p_aceitar: aceitar
       }
 
-      console.log('[responderProposta] Chamando RPC executar_aceite_proposta com params:', params)
-
       // Chama a RPC estável que usa SECURITY DEFINER para bypassar RLS
       const { data, error } = await supabase.rpc('executar_aceite_proposta', params)
 
@@ -1036,10 +1225,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await atualizarEnderecoNaProposta(propostaId, endereco)
       }
 
-      // Se aceitou, marca o equipamento como LOCADO
+      // Se aceitou, marca o equipamento como RESERVADO
       if (aceitar && chatData?.equipamento_id) {
-        console.log('[responderProposta] Marcando equipamento como LOCADO:', chatData.equipamento_id)
-
         // Busca o nome do locatário para salvar no equipamento
         const { data: profileData } = await supabase
           .from('profiles')
@@ -1052,23 +1239,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { error: equipamentoError } = await supabase
           .from('equipamentos')
           .update({
-            status: 'LOCADO',
+            status: 'RESERVADO',
             locado_para: nomeCliente,
             locado_para_id: userId
           })
           .eq('id', chatData.equipamento_id)
 
         if (equipamentoError) {
-          console.warn('[responderProposta] Erro ao marcar equipamento como LOCADO:', equipamentoError.message)
-          // Não retorna erro pois a proposta já foi aceita
+          console.warn('[responderProposta] Erro ao marcar equipamento como RESERVADO:', equipamentoError.message)
         } else {
-          console.log('[responderProposta] Equipamento marcado como LOCADO para:', nomeCliente)
-          // Atualiza lista de equipamentos para remover da Home
           await fetchEquipamentos()
         }
       }
 
-      console.log('[responderProposta] Sucesso:', response?.message || 'Proposta processada')
       return { success: true }
 
     } catch (err) {
@@ -1088,7 +1271,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     endereco: EnderecoEntrega
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log('[atualizarEnderecoNaProposta] Salvando endereço:', endereco)
       const { error } = await supabase
         .from('propostas')
         .update({
@@ -1104,7 +1286,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: error.message }
       }
 
-      console.log('[atualizarEnderecoNaProposta] Endereço salvo com sucesso')
       return { success: true }
     } catch (err) {
       console.error('[atualizarEnderecoNaProposta] Erro inesperado:', err)
@@ -1160,17 +1341,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Marca todas as mensagens de um chat como lidas
   const marcarMensagensComoLidas = async (chatId: string, userId: string): Promise<void> => {
     try {
-      // RAIO-X: mensagens usa sender_id (não remetente_id)
-      const { error } = await supabase
+      // Update 1: marca mensagens com lida = false
+      const { error: err1 } = await supabase
         .from('mensagens')
         .update({ lida: true })
         .eq('chat_id', chatId)
         .neq('sender_id', userId)
-        .or('lida.is.null,lida.eq.false')
+        .eq('lida', false)
 
-      if (error) {
-        console.error('[marcarMensagensComoLidas] Erro:', error)
-        return
+      if (err1) {
+        console.error('[marcarMensagensComoLidas] Erro update lida=false:', err1)
+      }
+
+      // Update 2: marca mensagens com lida = null (fallback)
+      const { error: err2 } = await supabase
+        .from('mensagens')
+        .update({ lida: true })
+        .eq('chat_id', chatId)
+        .neq('sender_id', userId)
+        .is('lida', null)
+
+      if (err2) {
+        console.error('[marcarMensagensComoLidas] Erro update lida=null:', err2)
       }
 
       // Atualiza o contador local
@@ -1186,8 +1378,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // - chats: id, proposta_id, locador_id, locatario_id
   const fetchEntregasPendentes = async (locadorId: string): Promise<EntregaPendente[]> => {
     try {
-      console.log('[fetchEntregasPendentes] Buscando para locador:', locadorId)
-
       // 1. Busca chats do locador (chats têm proposta_id, NÃO equipamento_id)
       const { data: chats, error: chatsError } = await supabase
         .from('chats')
@@ -1200,17 +1390,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (!chats || chats.length === 0) {
-        console.log('[fetchEntregasPendentes] Nenhum chat encontrado para o locador')
         return []
       }
-
-      console.log('[fetchEntregasPendentes] Chats encontrados:', chats.length)
 
       // 2. Busca propostas aceitas pelos IDs dos chats
       const propostaIds = chats.map(c => c.proposta_id).filter(Boolean)
 
       if (propostaIds.length === 0) {
-        console.log('[fetchEntregasPendentes] Nenhuma proposta vinculada aos chats')
         return []
       }
 
@@ -1228,7 +1414,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (!propostas || propostas.length === 0) {
-        console.log('[fetchEntregasPendentes] Nenhuma proposta com status=aceita')
         return []
       }
 
@@ -1238,10 +1423,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return !statusEntrega || statusEntrega !== 'ENTREGUE'
       })
 
-      console.log('[fetchEntregasPendentes] Propostas aceitas encontradas:', propostas.length, '| Pendentes de entrega:', propostasPendentes.length)
-
       if (propostasPendentes.length === 0) {
-        console.log('[fetchEntregasPendentes] Todas as propostas já foram entregues')
         return []
       }
 
@@ -1271,8 +1453,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         c.nome_empresa || c.full_name || c.email || 'Cliente'
       ]))
 
-      console.log('[fetchEntregasPendentes] Clientes mapeados:', clientesMap.size)
-
       // 5. Monta a lista de entregas pendentes
       // ESTRUTURA REAL: só tem endereco_logradouro, endereco_cep, endereco_cidade, endereco_uf
       const entregas: EntregaPendente[] = propostasPendentes.map(proposta => {
@@ -1290,7 +1470,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       })
 
-      console.log('[fetchEntregasPendentes] Entregas montadas:', entregas.length)
       return entregas
     } catch (err) {
       console.error('[fetchEntregasPendentes] Erro:', err)
@@ -1305,8 +1484,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     propostaId: string,
     equipamentoId: string
   ): Promise<{ success: boolean; error?: string }> => {
-    console.log('[marcarComoEntregue] Iniciando para proposta:', propostaId)
-
     try {
       // Tenta usar a RPC se existir
       const { data, error } = await supabase.rpc('marcar_como_entregue', {
@@ -1340,7 +1517,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return { success: false, error: equipamentoError.message }
         }
 
-        console.log('[marcarComoEntregue] Fallback executado - equipamento marcado como OCUPADO')
         return { success: true }
       }
 
@@ -1350,7 +1526,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, error: response.error || 'Erro ao marcar entrega' }
       }
 
-      console.log('[marcarComoEntregue] Sucesso via RPC')
       return { success: true }
     } catch (err) {
       console.error('[marcarComoEntregue] Erro inesperado:', err)
@@ -1361,15 +1536,103 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Confirma a devolução/retorno do equipamento
-  // ESTRUTURA REAL: equipamentos só tem 'status' (volta para DISPONIVEL)
-  const confirmarRetorno = async (
+  // Despacha equipamento para o cliente (RESERVADO → OCUPADO direto, sem etapa EM_TRANSITO)
+  const despacharEquipamento = async (
     propostaId: string,
     equipamentoId: string
   ): Promise<{ success: boolean; error?: string }> => {
-    console.log('[confirmarRetorno] Iniciando para proposta:', propostaId)
-
     try {
+      const { error: eqError } = await supabase
+        .from('equipamentos')
+        .update({ status: 'OCUPADO' })
+        .eq('id', equipamentoId)
+
+      if (eqError) {
+        console.error('[despacharEquipamento] Erro:', eqError)
+        return { success: false, error: eqError.message }
+      }
+
+      // Marca proposta com status_entrega = ENTREGUE
+      await supabase
+        .from('propostas')
+        .update({ status_entrega: 'ENTREGUE' })
+        .eq('id', propostaId)
+
+      // Envia mensagem automática no chat
+      const { data: chatData } = await supabase
+        .from('chats')
+        .select('id, locador_id')
+        .eq('proposta_id', propostaId)
+        .single()
+
+      if (chatData?.id) {
+        await supabase.from('mensagens').insert({
+          chat_id: chatData.id,
+          sender_id: chatData.locador_id,
+          texto: '🚛 Equipamento enviado ao cliente!',
+          lida: false
+        })
+      }
+
+      await fetchEquipamentos()
+      return { success: true }
+    } catch (err) {
+      console.error('[despacharEquipamento] Erro inesperado:', err)
+      return { success: false, error: 'Erro inesperado ao despachar equipamento' }
+    }
+  }
+
+  // Edita uma proposta pendente (locador pode alterar valores antes do aceite)
+  const editarProposta = async (
+    propostaId: string,
+    dados: Partial<NovaProposta>
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const updateFields: Record<string, unknown> = {}
+      if (dados.valor_diaria !== undefined) updateFields.valor_diaria = dados.valor_diaria
+      if (dados.valor_frete !== undefined) updateFields.valor_frete = dados.valor_frete
+      if (dados.valor_total !== undefined) updateFields.valor_total = dados.valor_total
+      if (dados.quantidade_dias !== undefined) updateFields.quantidade_dias = dados.quantidade_dias
+      if (dados.desconto !== undefined) updateFields.desconto = dados.desconto
+      if (dados.taxa_extra !== undefined) updateFields.taxa_extra = dados.taxa_extra
+      if (dados.data_inicio) updateFields.data_inicio = dados.data_inicio
+      if (dados.data_fim) updateFields.data_fim = dados.data_fim
+
+      const { error } = await supabase
+        .from('propostas')
+        .update(updateFields)
+        .eq('id', propostaId)
+        .eq('status', 'pendente') // Só permite editar propostas pendentes
+
+      if (error) {
+        console.error('[editarProposta] Erro:', error)
+        return { success: false, error: error.message }
+      }
+
+      return { success: true }
+    } catch (err) {
+      console.error('[editarProposta] Erro inesperado:', err)
+      return { success: false, error: 'Erro inesperado ao editar proposta' }
+    }
+  }
+
+  // Confirma a devolução/retorno do equipamento
+  // Preserva histórico de mensagens e proposta
+  const confirmarRetorno = async (
+    propostaId: string,
+    equipamentoId: string,
+    horimetroDados?: { horimetro_chegada?: number; horimetro_chegada_foto?: string }
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Salvar dados de horímetro de chegada na proposta (se fornecidos - Linha Amarela)
+      if (horimetroDados && (horimetroDados.horimetro_chegada !== undefined || horimetroDados.horimetro_chegada_foto)) {
+        const updateData: any = {}
+        if (horimetroDados.horimetro_chegada !== undefined) updateData.horimetro_chegada = horimetroDados.horimetro_chegada
+        if (horimetroDados.horimetro_chegada_foto) updateData.horimetro_chegada_foto = horimetroDados.horimetro_chegada_foto
+
+        await supabase.from('propostas').update(updateData).eq('id', propostaId)
+      }
+
       // Tenta usar a RPC se existir
       const { data, error } = await supabase.rpc('confirmar_retorno', {
         p_equipamento_id: equipamentoId,
@@ -1380,18 +1643,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.warn('[confirmarRetorno] RPC não disponível, usando fallback:', error.message)
 
-        // ESTRUTURA REAL: equipamentos só tem 'status' (volta para DISPONIVEL)
+        // 1. Busca o chat associado a esta proposta
+        const { data: chatData } = await supabase
+          .from('chats')
+          .select('id, locador_id')
+          .eq('proposta_id', propostaId)
+          .single()
+
+        // 2. Mantém proposta_id no chat (NÃO reseta - preserva referência para status bar e histórico)
+        if (chatData?.id) {
+          // Envia mensagem automática de devolução confirmada
+          await supabase.from('mensagens').insert({
+            chat_id: chatData.id,
+            sender_id: chatData.locador_id,
+            texto: '✅ Devolução confirmada! Equipamento disponível novamente.',
+            lida: false
+          })
+        }
+
+        // 3. Marca proposta como finalizada (preserva dados para histórico)
+        const { error: finalizarPropostaError } = await supabase
+          .from('propostas')
+          .update({ status: 'finalizada' })
+          .eq('id', propostaId)
+
+        if (finalizarPropostaError) {
+          console.warn('[confirmarRetorno] Erro ao finalizar proposta:', finalizarPropostaError.message)
+        }
+
+        // 4. Atualiza equipamento como DISPONIVEL e limpa dados de locação
         const { error: equipamentoError } = await supabase
           .from('equipamentos')
-          .update({ status: 'DISPONIVEL' })  // Volta a estar disponível
+          .update({
+            status: 'DISPONIVEL',
+            locado_para: null,
+            locado_para_id: null
+          })
           .eq('id', equipamentoId)
 
         if (equipamentoError) {
           console.error('[confirmarRetorno] Erro ao atualizar equipamento:', equipamentoError)
           return { success: false, error: equipamentoError.message }
         }
-
-        console.log('[confirmarRetorno] Fallback executado - equipamento voltou a DISPONIVEL')
 
         // Atualiza a lista de equipamentos para que apareça na Home
         await fetchEquipamentos()
@@ -1408,7 +1701,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Atualiza equipamentos localmente para mostrar na Home
       await fetchEquipamentos()
 
-      console.log('[confirmarRetorno] Sucesso via RPC')
       return { success: true }
     } catch (err) {
       console.error('[confirmarRetorno] Erro inesperado:', err)
@@ -1428,12 +1720,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const urls: string[] = []
 
       for (const file of files) {
-        console.log('[uploadImagens] Convertendo para base64:', {
-          name: file.name,
-          type: file.type,
-          size: file.size
-        })
-
         // Converte para base64
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
@@ -1445,7 +1731,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         urls.push(base64)
       }
 
-      console.log('[uploadImagens] Conversão concluída:', urls.length, 'imagens')
       return { urls }
     } catch (err) {
       console.error('[uploadImagens] Erro inesperado:', err)
@@ -1482,7 +1767,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Atualiza o estado local
       setEquipamentos(prev => prev.filter(eq => eq.id !== equipamentoId))
 
-      console.log('[deletarEquipamento] Equipamento deletado:', equipamentoId)
       return { success: true }
     } catch (err) {
       console.error('[deletarEquipamento] Erro inesperado:', err)
@@ -1506,7 +1790,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           categoria: dados.categoria,
           cidade: dados.cidade,
           uf: dados.uf,
-          fotos: dados.fotos
+          fotos: dados.fotos,
+          // Novos campos técnicos para Linha Amarela
+          ano: dados.ano || null,
+          horimetro_atual: dados.horimetro_atual || null,
+          peso_operacional: dados.peso_operacional || null,
+          // NÃO atualizar selo_verificado (apenas admin pode alterar)
+          // Campos Light Equipment
+          voltagem: dados.voltagem || null
         })
         .eq('id', equipamentoId)
         .eq('locador_id', locadorId)
@@ -1519,11 +1810,148 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Atualiza o estado local
       await fetchEquipamentos()
 
-      console.log('[atualizarEquipamento] Equipamento atualizado:', equipamentoId)
       return { success: true }
     } catch (err) {
       console.error('[atualizarEquipamento] Erro inesperado:', err)
       return { success: false, error: 'Erro inesperado ao atualizar equipamento' }
+    }
+  }
+
+  // ===== Funções de Consumíveis =====
+
+  const fetchConsumiveis = async (equipamentoId: string): Promise<Consumivel[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('consumiveis')
+        .select('*')
+        .eq('equipamento_id', equipamentoId)
+        .eq('ativo', true)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('[fetchConsumiveis] Erro:', error.message)
+        return []
+      }
+      return (data || []) as Consumivel[]
+    } catch {
+      return []
+    }
+  }
+
+  const addConsumivel = async (
+    equipamentoId: string,
+    nome: string,
+    preco: number
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('consumiveis')
+        .insert({ equipamento_id: equipamentoId, nome, preco, ativo: true })
+
+      if (error) {
+        console.error('[addConsumivel] Erro:', error.message)
+        return { success: false, error: error.message }
+      }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Erro inesperado ao adicionar consumível' }
+    }
+  }
+
+  const removeConsumivel = async (
+    consumivelId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('consumiveis')
+        .update({ ativo: false })
+        .eq('id', consumivelId)
+
+      if (error) {
+        console.error('[removeConsumivel] Erro:', error.message)
+        return { success: false, error: error.message }
+      }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Erro inesperado ao remover consumível' }
+    }
+  }
+
+  const salvarConsumiveisProposta = async (
+    propostaId: string,
+    items: { consumivel_id: string; quantidade: number; preco_unitario: number }[]
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Remove consumíveis anteriores desta proposta
+      await supabase.from('proposta_consumiveis').delete().eq('proposta_id', propostaId)
+
+      if (items.length === 0) return { success: true }
+
+      const inserts = items.map(item => ({
+        proposta_id: propostaId,
+        consumivel_id: item.consumivel_id,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario
+      }))
+
+      const { error } = await supabase.from('proposta_consumiveis').insert(inserts)
+
+      if (error) {
+        console.error('[salvarConsumiveisProposta] Erro:', error.message)
+        return { success: false, error: error.message }
+      }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Erro inesperado ao salvar consumíveis da proposta' }
+    }
+  }
+
+  const fetchConsumiveisProposta = async (propostaId: string): Promise<PropostaConsumivel[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('proposta_consumiveis')
+        .select('*, consumivel:consumiveis(nome)')
+        .eq('proposta_id', propostaId)
+
+      if (error) {
+        console.error('[fetchConsumiveisProposta] Erro:', error.message)
+        return []
+      }
+
+      return (data || []).map((item: any) => ({
+        id: item.id,
+        proposta_id: item.proposta_id,
+        consumivel_id: item.consumivel_id,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+        nome: item.consumivel?.nome || 'Item'
+      }))
+    } catch {
+      return []
+    }
+  }
+
+  // ===== Admin: Toggle Destaque =====
+
+  const toggleDestaque = async (
+    equipamentoId: string,
+    destaque: boolean
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('equipamentos')
+        .update({ destaque })
+        .eq('id', equipamentoId)
+
+      if (error) {
+        console.error('[toggleDestaque] Erro:', error.message)
+        return { success: false, error: error.message }
+      }
+
+      await fetchEquipamentos()
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Erro inesperado ao atualizar destaque' }
     }
   }
 
@@ -1552,7 +1980,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const novaMensagem = payload.new as Mensagem
           // RAIO-X: mensagens usa sender_id (não remetente_id)
           if (novaMensagem.sender_id !== currentUserIdRef.current) {
-            console.log('[Realtime] Nova mensagem de outro usuário, atualizando contador')
             // Recarrega contador para garantir precisão
             if (currentUserIdRef.current) {
               await fetchMensagensNaoLidas(currentUserIdRef.current)
@@ -1560,9 +1987,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[Realtime Mensagens] Status:', status)
-      })
+      .subscribe()
 
     mensagensChannelRef.current = channel
   }, [])
@@ -1644,10 +2069,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setupMensagensRealtime,
         fetchEntregasPendentes,
         marcarComoEntregue,
+        despacharEquipamento,
         confirmarRetorno,
+        editarProposta,
         uploadImagens,
         deletarEquipamento,
-        atualizarEquipamento
+        atualizarEquipamento,
+        fetchConsumiveis,
+        addConsumivel,
+        removeConsumivel,
+        salvarConsumiveisProposta,
+        fetchConsumiveisProposta,
+        toggleDestaque
       }}
     >
       {children}

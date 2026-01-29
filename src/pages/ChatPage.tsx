@@ -16,12 +16,13 @@ import {
   PropostaRecebidaCard,
   Toast
 } from '../components/chat'
+import { ChatStatusBar } from '../components/chat/ChatStatusBar'
 
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { enviarMensagem, enviarProposta, fetchProposta, responderProposta, marcarComoEntregue } = useApp()
+  const { enviarMensagem, enviarProposta, fetchProposta, responderProposta, marcarComoEntregue, despacharEquipamento, confirmarRetorno } = useApp()
 
   const { chat, mensagens, loading, carregarChat, carregarMensagens } = useChat(chatId)
   const { erro, sucesso, mostrarErro, mostrarSucesso, limparErro, limparSucesso } = useToast()
@@ -33,6 +34,8 @@ export default function ChatPage() {
   const [respondendoProposta, setRespondendoProposta] = useState(false)
   const [marcandoEntregue, setMarcandoEntregue] = useState(false)
   const [apagandoProposta, setApagandoProposta] = useState(false)
+  const [despachando, setDespachando] = useState(false)
+  const [confirmandoDevolucao, setConfirmandoDevolucao] = useState(false)
 
   const inputMensagemRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -44,10 +47,23 @@ export default function ChatPage() {
 
   const statusProposta = chat?.proposta?.status
   const temEndereco = !!chat?.proposta?.endereco_logradouro
+  const statusEquipamento = chat?.equipamento?.status?.toUpperCase()
+  const equipamentoDisponivel = !statusEquipamento || statusEquipamento === 'DISPONIVEL'
 
-  const podeGerarProposta = isLocador && (!statusProposta || statusProposta !== 'aceita')
+  // Locador pode gerar proposta SEMPRE se:
+  // 1. É locador
+  // 2. Equipamento está disponível
+  // 3. NÃO tem proposta pendente ou aceita ativa
+  const propostaAtiva = statusProposta === 'pendente' || statusProposta === 'aceita'
+  const podeGerarProposta = isLocador && equipamentoDisponivel && !propostaAtiva
+  const isReLocacao = podeGerarProposta && statusProposta === 'finalizada'
   const podeResponderProposta = isLocatario && statusProposta === 'pendente'
-  const podeConfirmarEntrega = isLocador && statusProposta === 'aceita' && temEndereco
+  // Despachar: locador pode enviar quando RESERVADO (proposta aceita, aguardando envio)
+  const podeDespachar = isLocador && statusEquipamento === 'RESERVADO'
+  // Confirmar entrega: locador pode confirmar quando EM_TRANSITO (legado)
+  const podeConfirmarEntrega = isLocador && statusEquipamento === 'EM_TRANSITO'
+  // Confirmar devolução: locador pode confirmar quando OCUPADO ou EM_TRANSITO
+  const podeConfirmarDevolucao = isLocador && (statusEquipamento === 'OCUPADO' || statusEquipamento === 'EM_TRANSITO')
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -69,7 +85,14 @@ export default function ChatPage() {
     setTimeout(() => inputMensagemRef.current?.focus(), 0)
   }
 
-  const handleEnviarProposta = async (dados: { valorDiaria: number; valorFrete: number }) => {
+  const handleEnviarProposta = async (dados: {
+    valorDiaria: number
+    valorFrete: number
+    desconto?: number
+    taxaExtra?: number
+    dataInicio?: string
+    dataFim?: string
+  }) => {
     if (!chatId || !user || !chat) return
     setEnviandoProposta(true)
 
@@ -80,15 +103,27 @@ export default function ChatPage() {
       return
     }
 
-    const quantidadeDias = chat.quantidade_dias || 0
-    const valorTotal = dados.valorDiaria * quantidadeDias + dados.valorFrete
+    // Calcular dias a partir das datas se disponivel
+    let diasCalc = chat.quantidade_dias || 0
+    if (dados.dataInicio && dados.dataFim) {
+      const d1 = new Date(dados.dataInicio)
+      const d2 = new Date(dados.dataFim)
+      diasCalc = Math.max(0, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)))
+    }
+
+    const subtotal = dados.valorDiaria * diasCalc
+    const valorTotal = subtotal + dados.valorFrete - (dados.desconto || 0) + (dados.taxaExtra || 0)
 
     const result = await enviarProposta(chatId, user.id, {
       equipamento_id: equipamentoId,
       valor_diaria: dados.valorDiaria,
-      quantidade_dias: quantidadeDias,
+      quantidade_dias: diasCalc,
       valor_frete: dados.valorFrete,
-      valor_total: valorTotal
+      valor_total: valorTotal,
+      desconto: dados.desconto,
+      taxa_extra: dados.taxaExtra,
+      data_inicio: dados.dataInicio,
+      data_fim: dados.dataFim,
     })
 
     if (result.success) {
@@ -103,25 +138,16 @@ export default function ChatPage() {
     }
   }
 
-  const handleAceitarProposta = async (propostaId: string) => {
+  const handleAceitarProposta = async (propostaId: string, endereco?: { logradouro: string; cep: string; cidade: string; uf: string }) => {
     if (!chatId || !user) return
     setRespondendoProposta(true)
 
     try {
-      const enderecoExistente = chat?.endereco_entrega_logradouro
-        ? {
-            cep: chat.endereco_entrega_cep || '',
-            logradouro: chat.endereco_entrega_logradouro,
-            cidade: chat.endereco_entrega_cidade || '',
-            uf: chat.endereco_entrega_uf || ''
-          }
-        : undefined
-
-      const result = await responderProposta(propostaId, chatId, true, user.id, enderecoExistente)
+      const result = await responderProposta(propostaId, chatId, true, user.id, endereco)
       setRespondendoProposta(false)
 
       if (result.success) {
-        mostrarSucesso('Proposta aceita com sucesso! O locador irá preparar a entrega.')
+        mostrarSucesso('Proposta aceita! Endereco cadastrado com sucesso. Aguarde a entrega.')
         await carregarChat()
       } else {
         mostrarErro(result.error || 'Erro ao aceitar proposta')
@@ -205,10 +231,58 @@ export default function ChatPage() {
     }
   }
 
+  const handleDespachar = async () => {
+    if (!chat?.proposta?.id || !chat?.equipamento?.id) return
+
+    setDespachando(true)
+    try {
+      const result = await despacharEquipamento(chat.proposta.id, chat.equipamento.id)
+
+      if (result.success) {
+        mostrarSucesso('Equipamento despachado! O cliente sera notificado.')
+        await carregarChat()
+        await carregarMensagens()
+      } else {
+        mostrarErro(`Erro ao despachar: ${result.error || 'Erro desconhecido'}`)
+      }
+    } catch {
+      mostrarErro('Erro inesperado ao despachar equipamento.')
+    } finally {
+      setDespachando(false)
+    }
+  }
+
+  const handleConfirmarDevolucao = async () => {
+    if (!chat?.proposta?.id || !chat?.equipamento?.id) return
+
+    const confirmar = window.confirm('Confirma que o equipamento foi devolvido?')
+    if (!confirmar) return
+
+    setConfirmandoDevolucao(true)
+    try {
+      const result = await confirmarRetorno(chat.proposta.id, chat.equipamento.id)
+
+      if (result.success) {
+        mostrarSucesso('Devolução confirmada! Equipamento disponível novamente.')
+        await carregarChat()
+        await carregarMensagens()
+      } else {
+        mostrarErro(`Erro ao confirmar devolução: ${result.error || 'Erro desconhecido'}`)
+      }
+    } catch {
+      mostrarErro('Erro inesperado ao confirmar devolução.')
+    } finally {
+      setConfirmandoDevolucao(false)
+    }
+  }
+
+  // Estado de carregamento: confia no retry interno do useChat (8 tentativas)
+  // Não precisa de retry adicional aqui para evitar loop infinito
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-amber-600 mb-4" />
+        <p className="text-gray-600 font-medium">Carregando conversa...</p>
       </div>
     )
   }
@@ -218,15 +292,23 @@ export default function ChatPage() {
       <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
         <HardHat className="w-16 h-16 text-gray-300 mb-4" />
         <h2 className="text-xl font-semibold text-gray-600 mb-2">Chat não encontrado</h2>
-        <p className="text-gray-400 mb-4">
+        <p className="text-gray-400 mb-4 text-center">
           Este chat pode ter sido removido ou você não tem acesso.
         </p>
-        <Link
-          to="/chats"
-          className="px-6 py-3 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 transition-colors"
-        >
-          Voltar para Conversas
-        </Link>
+        <div className="flex gap-3">
+          <button
+            onClick={() => carregarChat()}
+            className="px-6 py-3 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors"
+          >
+            Tentar Novamente
+          </button>
+          <Link
+            to="/chats"
+            className="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            Voltar para Conversas
+          </Link>
+        </div>
       </div>
     )
   }
@@ -241,16 +323,35 @@ export default function ChatPage() {
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <ChatHeader
         equipamentoNome={chat.equipamento?.nome}
+        equipamentoCategoria={chat.equipamento?.categoria ?? undefined}
+        equipamentoAno={chat.equipamento?.ano}
+        equipamentoHorimetro={chat.equipamento?.horimetro_atual}
+        equipamentoPeso={chat.equipamento?.peso_operacional}
+        nomeContraparte={isLocador ? chat.locatario_nome : chat.locador_nome}
+        isLocador={isLocador}
         onVoltar={() => navigate(-1)}
         podeGerarProposta={podeGerarProposta}
         podeResponderProposta={podeResponderProposta}
         podeConfirmarEntrega={podeConfirmarEntrega}
+        podeDespachar={podeDespachar}
+        podeConfirmarDevolucao={podeConfirmarDevolucao}
+        isReLocacao={isReLocacao}
         onGerarProposta={() => setModalPropostaOpen(true)}
         onAceitarProposta={() => chat.proposta?.id && handleAceitarProposta(chat.proposta.id)}
         onRecusarProposta={() => chat.proposta?.id && handleRecusarProposta(chat.proposta.id)}
         onConfirmarEntrega={handleMarcarComoEntregue}
+        onDespachar={handleDespachar}
+        onConfirmarDevolucao={handleConfirmarDevolucao}
         respondendoProposta={respondendoProposta}
         marcandoEntregue={marcandoEntregue}
+        despachando={despachando}
+        confirmandoDevolucao={confirmandoDevolucao}
+      />
+
+      <ChatStatusBar
+        propostaStatus={chat.proposta?.status}
+        equipamentoStatus={chat.equipamento?.status}
+        hasProposal={!!chat.proposta}
       />
 
       <Toast message={sucesso} type="success" onClose={limparSucesso} />
@@ -271,9 +372,15 @@ export default function ChatPage() {
           {showPropostaRecebidaCard && (
             <PropostaRecebidaCard
               proposta={chat.proposta!}
-              onAceitar={() => handleAceitarProposta(chat.proposta!.id)}
+              onAceitar={(endereco) => handleAceitarProposta(chat.proposta!.id, endereco)}
               onRecusar={() => handleRecusarProposta(chat.proposta!.id)}
               respondendo={respondendoProposta}
+              enderecoExistente={chat.endereco_entrega_logradouro ? {
+                logradouro: chat.endereco_entrega_logradouro,
+                cep: chat.endereco_entrega_cep || '',
+                cidade: chat.endereco_entrega_cidade || '',
+                uf: chat.endereco_entrega_uf || ''
+              } : undefined}
             />
           )}
 

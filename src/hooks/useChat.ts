@@ -23,13 +23,41 @@ export function useChat(chatId: string | undefined): UseChatReturn {
 
   const carregarChat = useCallback(async () => {
     if (!chatId || !mountedRef.current) return
-    try {
-      const chatData = await fetchChat(chatId)
-      if (mountedRef.current) {
-        setChat(chatData)
+
+    // Retry logic: tenta até 8 vezes com delay progressivo
+    const MAX_RETRIES = 8
+    const BASE_RETRY_DELAY = 600
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const chatData = await fetchChat(chatId)
+
+        if (chatData && mountedRef.current) {
+          setChat(chatData)
+          return
+        }
+
+        // Se não encontrou o chat e não é a última tentativa, aguarda antes de tentar novamente
+        if (!chatData && attempt < MAX_RETRIES && mountedRef.current) {
+          // Delay progressivo: 600ms, 800ms, 1000ms...
+          const delay = BASE_RETRY_DELAY + (attempt * 200)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+      } catch (err) {
+        console.error(`[useChat] Erro ao carregar chat (tentativa ${attempt}/${MAX_RETRIES}):`, err)
+
+        // Se não é a última tentativa, aguarda antes de tentar novamente
+        if (attempt < MAX_RETRIES && mountedRef.current) {
+          const delay = BASE_RETRY_DELAY + (attempt * 200)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-    } catch (err) {
-      console.error('[useChat] Erro ao carregar chat:', err)
+    }
+
+    // Se chegou aqui, esgotou todas as tentativas sem sucesso
+    console.warn('[useChat] Não foi possível carregar o chat após todas as tentativas')
+    if (mountedRef.current) {
+      setChat(null)
     }
   }, [chatId, fetchChat])
 
@@ -112,8 +140,16 @@ export function useChat(chatId: string | undefined): UseChatReturn {
         { event: 'UPDATE', schema: 'public', table: 'propostas' },
         async (payload) => {
           if (!mountedRef.current) return
-          if (chat?.equipamento?.id === (payload.new as { equipamento_id: string }).equipamento_id) {
+          const novaProposta = payload.new as { equipamento_id: string; status: string }
+
+          if (chat?.equipamento?.id === novaProposta.equipamento_id) {
             await carregarChat()
+
+            if (novaProposta.status === 'aceita') {
+              setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }, 300)
+            }
           }
         }
       )
