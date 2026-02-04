@@ -16,21 +16,21 @@ Se você tem algo parado que poderia estar gerando dinheiro, agora você pode **
 
 ## 🔄 Como Funciona?
 
-### 👷 Para quem quer ALUGAR equipamentos:
+### 👤 Para quem quer ALUGAR:
 
-1. **🔍 Busque** o equipamento que precisa (betoneira, andaime, compactador, etc.)
-2. **📊 Compare** preços e veja fotos reais dos equipamentos
-3. **📝 Solicite** a locação informando o período e local de entrega
+1. **🔍 Busque** o que você precisa (equipamento, veículo, espaço, item...)
+2. **📊 Compare** preços e veja fotos reais
+3. **📝 Solicite** a locação informando período e local
 4. **💬 Negocie** diretamente com o proprietário pelo chat
-5. **✅ Receba** o equipamento e mãos à obra!
+5. **✅ Receba** e use!
 
-### 💰 Para quem quer GANHAR DINHEIRO com seus equipamentos:
+### 💰 Para quem quer GANHAR DINHEIRO:
 
-1. **📸 Cadastre** seus equipamentos com fotos e preço da diária
-2. **🔔 Receba** solicitações de pessoas interessadas
+1. **📸 Cadastre** o que você tem com fotos e preço
+2. **🔔 Receba** solicitações de interessados
 3. **💬 Negocie** pelo chat integrado
-4. **🚚 Entregue** o equipamento e acompanhe tudo pelo app
-5. **💵 Receba** o pagamento de forma segura
+4. **🚚 Entregue** e acompanhe tudo pelo app
+5. **💵 Receba** o pagamento
 
 ---
 
@@ -38,7 +38,7 @@ Se você tem algo parado que poderia estar gerando dinheiro, agora você pode **
 
 | Antes (sem Trakto Rent) | Agora (com Trakto Rent) |
 |-------------------------|-------------------------|
-| Equipamento parado = prejuízo | Equipamento parado = renda extra |
+| Item parado = prejuízo | Item parado = renda extra |
 | Precisou comprar = gasto alto | Precisou usar = aluga por dias |
 | Encontrar locador = difícil | Encontrar = busca em segundos |
 | Negociação = ligações e WhatsApp | Negociação = chat organizado |
@@ -51,16 +51,16 @@ Se você tem algo parado que poderia estar gerando dinheiro, agora você pode **
 
 ### 🔍 Para Locatários (quem aluga)
 
-- **Busca Inteligente** — Encontre equipamentos por categoria, cidade ou nome
-- **Fotos Reais** — Veja o estado real do equipamento antes de alugar
+- **Busca Inteligente** — Encontre o que precisa por categoria, cidade ou nome
+- **Fotos Reais** — Veja o estado real antes de alugar
 - **Chat Direto** — Converse com o proprietário sem sair do app
 - **Histórico** — Acompanhe todas as suas locações em um só lugar
-- **Favoritos** — Salve equipamentos para alugar depois
+- **Favoritos** — Salve itens para alugar depois
 
-### 📊 Para Locadores (donos de equipamentos)
+### 📊 Para Locadores (quem disponibiliza)
 
-- **Painel Completo** — Veja tudo: equipamentos, reservas, ganhos
-- **Calendário Visual** — Saiba quando cada equipamento está ocupado
+- **Painel Completo** — Veja tudo: itens, reservas, ganhos
+- **Calendário Visual** — Saiba quando cada item está ocupado
 - **Controle Financeiro** — Acompanhe quanto você ganhou e vai receber
 - **Chat Centralizado** — Todas as conversas organizadas
 - **Geração de Contratos** — Contratos profissionais com um clique
@@ -68,18 +68,23 @@ Se você tem algo parado que poderia estar gerando dinheiro, agora você pode **
 
 ---
 
-## 🏗️ Categorias de Equipamentos
+## 📦 O que pode ser alugado?
 
-O Trakto Rent aceita diversos tipos de equipamentos:
+**Literalmente qualquer coisa.** Alguns exemplos:
 
 | Categoria | Exemplos |
 |-----------|----------|
-| 🏗️ **Construção Civil** | Betoneiras, andaimes, compactadores, vibradores |
-| 🚜 **Linha Amarela** | Escavadeiras, retroescavadeiras, pás carregadeiras |
-| 🔧 **Ferramentas** | Furadeiras industriais, serras, lixadeiras |
-| 🌾 **Agrícola** | Tratores, implementos, pulverizadores |
-| 🎪 **Eventos** | Geradores, tendas, estruturas |
-| ➕ **E muito mais...** | Qualquer equipamento pode ser cadastrado |
+| 🏗️ **Construção** | Betoneiras, andaimes, compactadores, ferramentas |
+| 🚜 **Máquinas Pesadas** | Escavadeiras, retroescavadeiras, tratores |
+| 🚗 **Veículos** | Carros, motos, vans, caminhões |
+| 🎪 **Eventos** | Tendas, mesas, cadeiras, som, iluminação |
+| 📷 **Audiovisual** | Câmeras, drones, equipamentos de filmagem |
+| 🏠 **Casa e Jardim** | Cortadores de grama, lavadoras, móveis |
+| 💻 **Tecnologia** | Notebooks, projetores, equipamentos de TI |
+| ⚽ **Esportes** | Bicicletas, pranchas, equipamentos fitness |
+| 👗 **Moda** | Vestidos de festa, ternos, acessórios |
+| 🏢 **Espaços** | Salas, galpões, estúdios, vagas |
+| ➕ **E mais...** | Se dá pra alugar, cabe no Trakto Rent |
 
 ---
 
@@ -95,10 +100,10 @@ O Trakto Rent aceita diversos tipos de equipamentos:
 ## ❓ Perguntas Frequentes
 
 **💵 Quanto custa usar o Trakto Rent?**
-> Cadastrar equipamentos e buscar é gratuito. Uma pequena taxa é cobrada apenas quando uma locação é concluída.
+> Cadastrar e buscar é gratuito. Uma pequena taxa é cobrada apenas quando uma locação é concluída.
 
-**🔧 E se o equipamento quebrar durante a locação?**
-> O contrato gerado pelo sistema define as responsabilidades. Recomendamos sempre verificar o equipamento na entrega e devolução.
+**🔧 E se o item quebrar durante a locação?**
+> O contrato gerado pelo sistema define as responsabilidades. Recomendamos sempre verificar o item na entrega e devolução.
 
 **👥 Posso alugar para qualquer pessoa?**
 > Você tem total controle. Pode aceitar ou recusar qualquer solicitação e negociar os termos pelo chat.
@@ -110,11 +115,11 @@ O Trakto Rent aceita diversos tipos de equipamentos:
 
 ## 🌍 Nossa Missão
 
-O Trakto Rent nasceu da necessidade real de conectar quem tem equipamentos parados com quem precisa deles temporariamente.
+O Trakto Rent nasceu para conectar **quem tem** com **quem precisa**.
 
-Nossa missão é **democratizar o acesso a equipamentos** e criar uma economia colaborativa onde todos ganham:
+Nossa missão é **democratizar o acesso** e criar uma economia colaborativa onde todos ganham:
 
-- 💰 **Proprietários** ganham renda extra
+- 💰 **Proprietários** ganham renda extra com o que estava parado
 - 💡 **Locatários** economizam não precisando comprar
 - 🌱 **O planeta** ganha com menos produção desnecessária
 
@@ -122,8 +127,8 @@ Nossa missão é **democratizar o acesso a equipamentos** e criar uma economia c
 
 ## 🚀 Comece Agora
 
-| Tem equipamentos parados? | Precisa de um equipamento? |
-|---------------------------|----------------------------|
+| Tem algo parado? | Precisa de algo? |
+|------------------|------------------|
 | Cadastre e comece a ganhar dinheiro | Busque e encontre o melhor preço perto de você |
 
 ---
@@ -165,7 +170,7 @@ npm run preview
 ---
 
 <p align="center">
-  <strong>🚜 TRAKTO RENT</strong><br>
+  <strong>🚀 TRAKTO RENT</strong><br>
   <em>Conectando quem tem com quem precisa.</em>
 </p>
 
