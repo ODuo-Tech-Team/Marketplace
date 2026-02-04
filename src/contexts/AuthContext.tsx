@@ -24,6 +24,10 @@ export interface Profile {
   uf?: string | null
   // Flag para senha temporária (reset feito pelo admin)
   senha_temporaria?: boolean
+  // Onboarding fields
+  document_id?: string | null
+  whatsapp?: string | null
+  website_instagram?: string | null
 }
 
 interface AuthContextType {
@@ -46,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('[Auth] Buscando profile para userId:', userId)
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -54,27 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
 
       if (error) {
-        console.error('[Auth] Erro ao buscar profile:', error)
         setProfile(null)
         return
       }
 
       if (!data) {
-        console.warn('[Auth] Profile não encontrado para userId:', userId)
         setProfile(null)
         return
       }
 
-      console.log('[Auth] Profile carregado:', {
-        id: data.id,
-        email: data.email,
-        full_name: data.full_name,
-        tipo_usuario: data.tipo_usuario,
-        nome_empresa: data.nome_empresa
-      })
       setProfile(data as Profile)
     } catch (err) {
-      console.error('[Auth] Erro inesperado ao buscar profile:', err)
       setProfile(null)
     }
   }
@@ -84,22 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initAuth = async () => {
       try {
-        console.log('[Auth] Iniciando verificação de sessão...')
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (error) {
-          console.error('[Auth] Erro ao obter sessão:', error)
+          // Erro ao obter sessão
         } else if (session?.user) {
-          console.log('[Auth] Usuário encontrado:', session.user.email)
           setUser(session.user)
           await fetchProfile(session.user.id)
-        } else {
-          console.log('[Auth] Nenhuma sessão ativa')
         }
       } catch (err) {
-        console.error('[Auth] Erro inesperado:', err)
+        // Erro inesperado
       } finally {
-        console.log('[Auth] Inicialização concluída')
         initialized = true
         setLoading(false)
       }
@@ -111,16 +99,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (_event: string, session: Session | null) => {
         // Ignora eventos durante inicialização
         if (!initialized) {
-          console.log('[Auth] Ignorando evento durante inicialização')
           return
         }
-
-        console.log('[Auth] Estado mudou:', _event, session?.user?.email)
 
         if (session?.user) {
           setUser(session.user)
           // Sempre busca o profile fresco do banco no login
-          console.log('[Auth] Buscando profile fresco para:', session.user.id)
           await fetchProfile(session.user.id)
         } else {
           setUser(null)
@@ -151,7 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (authError) {
-        console.error('[Auth] Erro ao atualizar senha:', authError)
         // Traduz mensagens de erro do Supabase para português
         let errorMessage = authError.message
 
@@ -159,7 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // (usuário pode ter recarregado a página no meio do processo)
         // Nesse caso, limpa a flag e deixa o usuário continuar
         if (errorMessage.includes('different from the old password')) {
-          console.log('[Auth] Senha já foi trocada anteriormente, limpando flag...')
           // Limpa a flag no banco
           await supabase
             .from('profiles')
@@ -186,7 +168,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', user.id)
 
       if (profileError) {
-        console.error('[Auth] Erro ao limpar flag senha_temporaria:', profileError)
         // Senha foi atualizada, mas flag não foi limpa - ainda é sucesso
       }
 
@@ -195,11 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile({ ...profile, senha_temporaria: false })
       }
 
-      console.log('[Auth] Senha atualizada com sucesso')
       return { success: true }
 
     } catch (err) {
-      console.error('[Auth] Erro inesperado ao atualizar senha:', err)
       return { success: false, error: 'Erro inesperado ao atualizar senha' }
     }
   }

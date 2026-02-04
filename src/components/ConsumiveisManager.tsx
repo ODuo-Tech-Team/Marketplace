@@ -31,7 +31,7 @@ export function ConsumiveisManager({ consumiveis, onAdd, onRemove, loading }: Co
   }
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 overflow-hidden">
       <h4 className="text-sm font-bold text-blue-800 mb-3 flex items-center gap-2">
         <Package className="w-4 h-4" />
         Kit de Consumíveis (Venda Cruzada)
@@ -64,28 +64,31 @@ export function ConsumiveisManager({ consumiveis, onAdd, onRemove, loading }: Co
       )}
 
       {/* Formulário para adicionar */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 min-w-0 w-full">
         <input
           type="text"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           placeholder="Nome do item"
-          className="flex-1 px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          className="flex-1 min-w-0 px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
         />
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={preco}
-          onChange={(e) => setPreco(e.target.value)}
-          placeholder="R$"
-          className="w-24 px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-        />
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="text-sm text-blue-700 font-medium">R$</span>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={preco}
+            onChange={(e) => setPreco(e.target.value)}
+            placeholder="0,00"
+            className="w-16 px-2 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
+          />
+        </div>
         <button
           type="button"
           onClick={handleAdd}
           disabled={adicionando || !nome.trim() || !preco}
-          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+          className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
         </button>

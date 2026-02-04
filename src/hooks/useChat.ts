@@ -21,32 +21,37 @@ export function useChat(chatId: string | undefined): UseChatReturn {
   const [loading, setLoading] = useState(true)
   const mountedRef = useRef(true)
 
+  // Refs para funções instáveis do contexto — evita re-run do useEffect
+  const fetchChatRef = useRef(fetchChat)
+  const fetchMensagensRef = useRef(fetchMensagens)
+  const marcarLidasRef = useRef(marcarMensagensComoLidas)
+  const userIdRef = useRef(user?.id)
+
+  fetchChatRef.current = fetchChat
+  fetchMensagensRef.current = fetchMensagens
+  marcarLidasRef.current = marcarMensagensComoLidas
+  userIdRef.current = user?.id
+
   const carregarChat = useCallback(async () => {
     if (!chatId || !mountedRef.current) return
 
-    // Retry logic: tenta até 8 vezes com delay progressivo
     const MAX_RETRIES = 8
     const BASE_RETRY_DELAY = 600
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const chatData = await fetchChat(chatId)
+        const chatData = await fetchChatRef.current(chatId)
 
         if (chatData && mountedRef.current) {
           setChat(chatData)
           return
         }
 
-        // Se não encontrou o chat e não é a última tentativa, aguarda antes de tentar novamente
         if (!chatData && attempt < MAX_RETRIES && mountedRef.current) {
-          // Delay progressivo: 600ms, 800ms, 1000ms...
           const delay = BASE_RETRY_DELAY + (attempt * 200)
           await new Promise(resolve => setTimeout(resolve, delay))
         }
       } catch (err) {
-        console.error(`[useChat] Erro ao carregar chat (tentativa ${attempt}/${MAX_RETRIES}):`, err)
-
-        // Se não é a última tentativa, aguarda antes de tentar novamente
         if (attempt < MAX_RETRIES && mountedRef.current) {
           const delay = BASE_RETRY_DELAY + (attempt * 200)
           await new Promise(resolve => setTimeout(resolve, delay))
@@ -54,35 +59,33 @@ export function useChat(chatId: string | undefined): UseChatReturn {
       }
     }
 
-    // Se chegou aqui, esgotou todas as tentativas sem sucesso
-    console.warn('[useChat] Não foi possível carregar o chat após todas as tentativas')
     if (mountedRef.current) {
       setChat(null)
     }
-  }, [chatId, fetchChat])
+  }, [chatId])
 
   const carregarMensagens = useCallback(async () => {
     if (!chatId || !mountedRef.current) return
     try {
-      const msgs = await fetchMensagens(chatId)
+      const msgs = await fetchMensagensRef.current(chatId)
       if (!mountedRef.current) return
 
       setMensagens(msgs)
 
-      if (user?.id) {
-        marcarMensagensComoLidas(chatId, user.id)
+      const uid = userIdRef.current
+      if (uid) {
+        marcarLidasRef.current(chatId, uid)
       }
 
       if (mountedRef.current) {
         setLoading(false)
       }
     } catch (err) {
-      console.error('[useChat] Erro ao carregar mensagens:', err)
       if (mountedRef.current) {
         setLoading(false)
       }
     }
-  }, [chatId, fetchMensagens, marcarMensagensComoLidas, user?.id])
+  }, [chatId])
 
   useEffect(() => {
     mountedRef.current = true
@@ -110,15 +113,34 @@ export function useChat(chatId: string | undefined): UseChatReturn {
 
           const novaMsgRealtime = payload.new as Mensagem
 
+          // Atualiza mensagens imediatamente
           setMensagens((prev) => {
             const jaExiste = prev.some((m) => m.id === novaMsgRealtime.id)
             if (jaExiste) return prev
             return [...prev, novaMsgRealtime]
           })
 
-          if (user?.id && novaMsgRealtime.sender_id !== user.id) {
-            marcarMensagensComoLidas(chatId, user.id)
+          const uid = userIdRef.current
+          if (uid && novaMsgRealtime.sender_id !== uid) {
+            marcarLidasRef.current(chatId, uid)
           }
+
+          // Sempre recarrega o chat para atualizar última mensagem
+          await carregarChat()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'mensagens',
+          filter: `chat_id=eq.${chatId}`
+        },
+        async () => {
+          if (!mountedRef.current) return
+          // Recarrega mensagens quando houver update (ex: lida=true)
+          await carregarMensagens()
         }
       )
       .subscribe()
@@ -127,30 +149,22 @@ export function useChat(chatId: string | undefined): UseChatReturn {
       .channel(`propostas-chat-${chatId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'propostas' },
-        async (payload) => {
+        { event: '*', schema: 'public', table: 'propostas' },
+        async () => {
           if (!mountedRef.current) return
-          if (chat?.equipamento?.id === (payload.new as { equipamento_id: string }).equipamento_id) {
-            await carregarChat()
-          }
+          await carregarChat()
         }
       )
+      .subscribe()
+
+    const chatUpdateChannel: RealtimeChannel = supabase
+      .channel(`chat-update-${chatId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'propostas' },
-        async (payload) => {
+        { event: 'UPDATE', schema: 'public', table: 'chats', filter: `id=eq.${chatId}` },
+        async () => {
           if (!mountedRef.current) return
-          const novaProposta = payload.new as { equipamento_id: string; status: string }
-
-          if (chat?.equipamento?.id === novaProposta.equipamento_id) {
-            await carregarChat()
-
-            if (novaProposta.status === 'aceita') {
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }, 300)
-            }
-          }
+          await carregarChat()
         }
       )
       .subscribe()
@@ -166,8 +180,9 @@ export function useChat(chatId: string | undefined): UseChatReturn {
       clearInterval(interval)
       supabase.removeChannel(channel)
       supabase.removeChannel(propostasChannel)
+      supabase.removeChannel(chatUpdateChannel)
     }
-  }, [chatId, carregarChat, carregarMensagens, chat?.equipamento?.id, marcarMensagensComoLidas, user?.id])
+  }, [chatId, carregarChat, carregarMensagens])
 
   return {
     chat,

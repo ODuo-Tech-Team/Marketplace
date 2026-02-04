@@ -1,4 +1,4 @@
-import { FileText, X, Loader2, Calendar, Truck, User, Clock, Package } from 'lucide-react'
+import { FileText, X, Loader2, Calendar, Truck, HardHat, Clock, Package } from 'lucide-react'
 import type { Proposta, PropostaConsumivel } from '../../contexts/AppContext'
 import { isLinhaAmarela } from '../../contexts/AppContext'
 
@@ -24,26 +24,34 @@ export function PropostaEnviadaCard({ proposta, onApagar, apagando, equipamentoC
   const temOperador = proposta.com_operador && proposta.valor_operador_diaria && proposta.valor_operador_diaria > 0
 
   return (
-    <div className={`mb-6 bg-gradient-to-br ${isLA ? 'from-amber-50 to-yellow-50 border-2 border-amber-400' : 'from-blue-50 to-cyan-50 border-2 border-blue-300'} rounded-2xl p-6 shadow-lg`}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <FileText className={`w-6 h-6 ${isLA ? 'text-amber-600' : 'text-blue-600'}`} />
-          Proposta Enviada
-          {isLA && <span className="px-2 py-0.5 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full">PESADO</span>}
-        </h3>
-        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-sm font-bold rounded-full">
-          Aguardando resposta
+    <div className="mb-6 rounded-2xl overflow-hidden shadow-lg border border-border-subtle">
+      {/* Dark Header */}
+      <div className="bg-surface-elevated px-5 py-4 flex items-center justify-between border-b border-border-subtle">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-cta rounded-lg flex items-center justify-center">
+            <FileText className="w-4 h-4 text-foreground" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              PROPOSTA
+              {isLA && <span className="px-2 py-0.5 bg-cta/20 text-cta text-[10px] font-bold rounded-full uppercase tracking-wider">Pesado</span>}
+            </h3>
+          </div>
+        </div>
+        <span className="px-3 py-1 bg-cta/20 text-cta text-[10px] font-bold rounded-full uppercase tracking-wider">
+          Pendente
         </span>
       </div>
 
-      <div className="space-y-4">
+      {/* Body */}
+      <div className="bg-surface-elevated p-5 space-y-4">
         {/* Periodo */}
         {temDatas && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-            <p className="text-xs font-semibold text-blue-700 mb-1 flex items-center gap-1">
+          <div className="bg-surface-inset/50 rounded-2xl p-4 border border-border-subtle">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-1.5 flex items-center gap-1">
               <Calendar className="w-3 h-3" /> Periodo
             </p>
-            <p className="text-sm text-gray-800 font-medium">
+            <p className="text-sm text-foreground-secondary font-medium">
               {formatDate(proposta.data_inicio)} - {formatDate(proposta.data_fim)}
             </p>
           </div>
@@ -51,31 +59,31 @@ export function PropostaEnviadaCard({ proposta, onApagar, apagando, equipamentoC
 
         {/* Campos Linha Amarela */}
         {isLA && (proposta.horimetro_saida || proposta.tipo_veiculo_transporte || temOperador) && (
-          <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-2">
-            <p className="text-xs font-semibold text-amber-700 flex items-center gap-1">
+          <div className="bg-cta/10 border border-cta/20 rounded-2xl p-4 space-y-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-cta flex items-center gap-1">
               <Truck className="w-3 h-3" /> Dados Linha Amarela
             </p>
             {proposta.horimetro_saida && (
               <div className="flex items-center gap-2">
-                <Clock className="w-3 h-3 text-amber-600" />
-                <span className="text-sm text-gray-700">Horímetro Saída: <strong>{proposta.horimetro_saida}h</strong></span>
+                <Clock className="w-3 h-3 text-cta" />
+                <span className="text-sm text-foreground-secondary">Horímetro Saída: <strong>{proposta.horimetro_saida}h</strong></span>
                 {proposta.horimetro_saida_foto && (
-                  <img src={proposta.horimetro_saida_foto} alt="Horímetro" className="w-8 h-8 rounded object-cover border border-amber-300" />
+                  <img src={proposta.horimetro_saida_foto} alt="Horímetro" className="w-8 h-8 rounded-lg object-cover border border-cta/30" />
                 )}
               </div>
             )}
             {temOperador && (
               <div className="flex items-center gap-2">
-                <User className="w-3 h-3 text-amber-600" />
-                <span className="text-sm text-gray-700">
+                <HardHat className="w-3 h-3 text-cta" />
+                <span className="text-sm text-foreground-secondary">
                   Operador: <strong>R$ {proposta.valor_operador_diaria!.toFixed(2)}/dia</strong>
                 </span>
               </div>
             )}
             {proposta.tipo_veiculo_transporte && (
               <div className="flex items-center gap-2">
-                <Truck className="w-3 h-3 text-amber-600" />
-                <span className="text-sm text-gray-700">
+                <Truck className="w-3 h-3 text-cta" />
+                <span className="text-sm text-foreground-secondary">
                   Veículo: <strong>{proposta.tipo_veiculo_transporte}</strong>
                 </span>
               </div>
@@ -83,45 +91,46 @@ export function PropostaEnviadaCard({ proposta, onApagar, apagando, equipamentoC
           </div>
         )}
 
-        <div className="bg-white rounded-xl p-4 space-y-2">
+        {/* Valores */}
+        <div className="bg-surface-inset/50 rounded-2xl p-4 space-y-2 border border-border-subtle">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Valor da Diaria</span>
-            <span className="text-base font-bold text-gray-800">
+            <span className="text-sm text-foreground-secondary">Valor da Diaria</span>
+            <span className="text-sm font-bold text-foreground-secondary">
               R$ {proposta.valor_diaria?.toFixed(2) || '0.00'}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Quantidade de Dias</span>
-            <span className="text-base font-bold text-gray-800">
+            <span className="text-sm text-foreground-secondary">Quantidade de Dias</span>
+            <span className="text-sm font-bold text-foreground-secondary">
               {proposta.quantidade_dias || 0} dias
             </span>
           </div>
           {temOperador && (
-            <div className="flex justify-between items-center text-amber-700">
+            <div className="flex justify-between items-center text-cta">
               <span className="text-sm">Operador</span>
-              <span className="text-base font-bold">
+              <span className="text-sm font-bold">
                 + R$ {((proposta.valor_operador_diaria || 0) * (proposta.quantidade_dias || 0)).toFixed(2)}
               </span>
             </div>
           )}
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Valor do Frete</span>
-            <span className="text-base font-bold text-gray-800">
+            <span className="text-sm text-foreground-secondary">Valor do Frete</span>
+            <span className="text-sm font-bold text-foreground-secondary">
               R$ {proposta.valor_frete?.toFixed(2) || '0.00'}
             </span>
           </div>
           {temDesconto && (
-            <div className="flex justify-between items-center text-green-700">
+            <div className="flex justify-between items-center text-green-400">
               <span className="text-sm">Desconto</span>
-              <span className="text-base font-bold">
+              <span className="text-sm font-bold">
                 - R$ {proposta.desconto!.toFixed(2)}
               </span>
             </div>
           )}
           {temTaxaExtra && (
-            <div className="flex justify-between items-center text-orange-700">
+            <div className="flex justify-between items-center text-cta">
               <span className="text-sm">Taxa Extra</span>
-              <span className="text-base font-bold">
+              <span className="text-sm font-bold">
                 + R$ {proposta.taxa_extra!.toFixed(2)}
               </span>
             </div>
@@ -130,13 +139,13 @@ export function PropostaEnviadaCard({ proposta, onApagar, apagando, equipamentoC
           {/* Consumíveis */}
           {consumiveisProposta && consumiveisProposta.length > 0 && (
             <>
-              <div className="h-px bg-blue-200 my-1" />
+              <div className="h-px bg-border-subtle my-1" />
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-blue-700 flex items-center gap-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1">
                   <Package className="w-3 h-3" /> Consumíveis
                 </p>
                 {consumiveisProposta.map((c) => (
-                  <div key={c.id} className="flex justify-between items-center text-blue-700">
+                  <div key={c.id} className="flex justify-between items-center text-blue-400">
                     <span className="text-sm">{c.nome} x{c.quantidade}</span>
                     <span className="text-sm font-bold">+ R$ {(c.preco_unitario * c.quantidade).toFixed(2)}</span>
                   </div>
@@ -145,24 +154,30 @@ export function PropostaEnviadaCard({ proposta, onApagar, apagando, equipamentoC
             </>
           )}
 
-          <div className="h-px bg-gray-200 my-2" />
-          <div className="flex justify-between items-center">
-            <span className="text-base font-bold text-gray-700">Valor Total</span>
-            <span className={`text-2xl font-bold ${isLA ? 'text-amber-600' : 'text-blue-600'}`}>
+          <div className="h-px bg-border-subtle my-2" />
+          <div className="flex justify-between items-center pt-1">
+            <span className="font-black text-foreground">TOTAL</span>
+            <span className="text-2xl font-black text-green-400">
               R$ {proposta.valor_total?.toFixed(2) || '0.00'}
             </span>
           </div>
         </div>
 
+        {/* Status */}
+        <div className="bg-cta/10 border border-cta/20 rounded-2xl p-4 text-center">
+          <p className="text-cta font-bold text-sm">Aguardando Cliente</p>
+          <p className="text-cta/60 text-xs mt-0.5">A proposta foi enviada e está sendo analisada</p>
+        </div>
+
         <button
           onClick={onApagar}
           disabled={apagando}
-          className="w-full py-3 bg-red-100 text-red-700 text-base font-bold rounded-xl hover:bg-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full py-3.5 bg-glass-hover text-foreground-secondary font-bold rounded-xl hover:bg-glass-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-border-subtle"
         >
           {apagando ? <Loader2 className="w-5 h-5 animate-spin" /> : <X className="w-5 h-5" />}
           {apagando ? 'Apagando...' : 'Cancelar Proposta'}
         </button>
-        <p className="text-xs text-gray-500 text-center">
+        <p className="text-[11px] text-foreground-muted text-center font-medium">
           Voce pode cancelar esta proposta e criar uma nova com valores diferentes
         </p>
       </div>

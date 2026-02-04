@@ -35,7 +35,7 @@ export function HorimetroInput({ value, foto, onChange, onFotoChange, label, req
         {/* Campo numérico */}
         <div className="flex-1">
           <div className="relative">
-            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-600" />
+            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cta" />
             <input
               type="number"
               step="0.1"
@@ -44,7 +44,7 @@ export function HorimetroInput({ value, foto, onChange, onFotoChange, label, req
               onChange={(e) => onChange(e.target.value)}
               placeholder="Ex: 1500"
               required={required}
-              className="w-full pl-10 pr-4 py-2.5 border-2 border-amber-300 rounded-xl text-base focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none"
+              className="w-full pl-10 pr-4 py-2.5 border-2 border-blue-300 rounded-xl text-base focus:border-cta focus:ring-2 focus:ring-blue-200 outline-none"
             />
           </div>
           <p className="text-xs text-gray-500 mt-1">Horas</p>
@@ -57,7 +57,7 @@ export function HorimetroInput({ value, foto, onChange, onFotoChange, label, req
               <img
                 src={foto}
                 alt="Horímetro"
-                className="w-16 h-16 object-cover rounded-xl border-2 border-amber-400 cursor-pointer"
+                className="w-16 h-16 object-cover rounded-xl border-2 border-cta cursor-pointer"
                 onClick={() => setPreviewOpen(true)}
               />
               <button
@@ -72,10 +72,10 @@ export function HorimetroInput({ value, foto, onChange, onFotoChange, label, req
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-16 h-16 border-2 border-dashed border-amber-400 rounded-xl flex flex-col items-center justify-center hover:bg-amber-50 transition-colors"
+              className="w-16 h-16 border-2 border-dashed border-cta rounded-xl flex flex-col items-center justify-center hover:bg-blue-50 transition-colors"
             >
-              <Camera className="w-5 h-5 text-amber-600" />
-              <span className="text-[10px] text-amber-600 font-medium">Foto</span>
+              <Camera className="w-5 h-5 text-cta" />
+              <span className="text-[10px] text-cta font-medium">Foto</span>
             </button>
           )}
           <input

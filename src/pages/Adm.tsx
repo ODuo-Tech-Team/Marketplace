@@ -7,8 +7,9 @@ import {
   AlertCircle, Building2, KeyRound, Mail, Check, X, Eye, EyeOff,
   Calendar, Clock, Trash2, Search, UserCog, BadgeCheck, Shield,
   Filter, ChevronDown, ToggleLeft, ToggleRight, AlertTriangle,
-  Crown, ArrowUpRight, ArrowDownRight, BarChart3
+  Crown, ArrowUpRight, ArrowDownRight, BarChart3, Sparkles
 } from 'lucide-react'
+import TraktoLogo from '../components/TraktoLogo'
 
 // =====================================================
 // INTERFACES
@@ -77,6 +78,7 @@ interface Usuario {
   nome_empresa?: string
   tipo_usuario: 'locador' | 'locatario'
   verificado: boolean
+  destacado: boolean  // Locador PRO (pagou pelo destaque)
   solicitou_reset: boolean
   created_at: string
 }
@@ -116,9 +118,11 @@ interface EquipamentoAdmin {
   id: string
   nome: string
   categoria: string
+  vertical: string
   locador_nome: string
   status: string
   destaque: boolean
+  selo_verificado: boolean
 }
 
 // =====================================================
@@ -149,6 +153,7 @@ export default function Adm() {
   const [resetandoSenha, setResetandoSenha] = useState<string | null>(null)
   const [excluindoUsuario, setExcluindoUsuario] = useState<string | null>(null)
   const [alternandoVerificado, setAlternandoVerificado] = useState<string | null>(null)
+  const [alternandoDestacado, setAlternandoDestacado] = useState<string | null>(null)
   const [sucessoUsuario, setSucessoUsuario] = useState<string | null>(null)
 
   // Estados para modal de reset de senha
@@ -182,7 +187,7 @@ export default function Adm() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, nome_empresa, tipo_usuario, verificado, solicitou_reset, created_at')
+        .select('id, email, full_name, nome_empresa, tipo_usuario, verificado, destacado, solicitou_reset, created_at')
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -198,6 +203,7 @@ export default function Adm() {
         nome_empresa: u.nome_empresa || undefined,
         tipo_usuario: u.tipo_usuario || 'locatario',
         verificado: u.verificado || false,
+        destacado: u.destacado || false,
         solicitou_reset: u.solicitou_reset || false,
         created_at: u.created_at
       }))
@@ -269,6 +275,39 @@ export default function Adm() {
       setError('Erro inesperado ao alterar status')
     } finally {
       setAlternandoVerificado(null)
+    }
+  }
+
+  // Alterna o status de destaque PRO do locador
+  const toggleDestacado = async (usuario: Usuario) => {
+    setAlternandoDestacado(usuario.id)
+    try {
+      const novoStatus = !usuario.destacado
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ destacado: novoStatus })
+        .eq('id', usuario.id)
+
+      if (error) {
+        console.error('[Adm] Erro ao alterar destaque PRO:', error)
+        setError(`Erro ao alterar destaque: ${error.message}`)
+        return
+      }
+
+      // Atualiza localmente
+      setUsuarios(prev => prev.map(u =>
+        u.id === usuario.id ? { ...u, destacado: novoStatus } : u
+      ))
+
+      setSucessoUsuario(`${usuario.nome} ${novoStatus ? 'promovido a PRO' : 'removido do PRO'} com sucesso!`)
+      setTimeout(() => setSucessoUsuario(null), 3000)
+
+    } catch (err) {
+      console.error('[Adm] Erro ao alterar destaque PRO:', err)
+      setError('Erro inesperado ao alterar destaque')
+    } finally {
+      setAlternandoDestacado(null)
     }
   }
 
@@ -344,7 +383,7 @@ export default function Adm() {
     }
   }
 
-  // Exclui usuário do sistema
+  // Exclui usuário do sistema via Edge Function (service role)
   const excluirUsuario = async (usuario: Usuario) => {
     const confirma = window.confirm(
       `Tem certeza que deseja EXCLUIR "${usuario.nome}" (${usuario.email})?\n\nEsta ação é IRREVERSÍVEL!`
@@ -356,14 +395,20 @@ export default function Adm() {
     setSucessoUsuario(null)
 
     try {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', usuario.id)
+      const { data, error: fnError } = await supabase.functions.invoke('admin-delete-user', {
+        body: { userId: usuario.id }
+      })
 
-      if (profileError) {
-        console.error('[Adm] Erro ao excluir profile:', profileError)
-        setError(`Erro ao excluir usuário: ${profileError.message}`)
+      if (fnError) {
+        console.error('[Adm] Erro da Edge Function:', fnError)
+        setError(fnError.message || 'Erro ao excluir usuário')
+        setExcluindoUsuario(null)
+        return
+      }
+
+      if (data?.error) {
+        console.error('[Adm] Erro retornado:', data.error)
+        setError(data.error)
         setExcluindoUsuario(null)
         return
       }
@@ -786,7 +831,7 @@ export default function Adm() {
     try {
       const { data: equipamentos, error: eqError } = await supabase
         .from('equipamentos')
-        .select('id, nome, categoria, locador_id, status, destaque')
+        .select('id, nome, categoria, vertical, locador_id, status, destaque, selo_verificado')
         .order('nome')
 
       if (eqError || !equipamentos) {
@@ -810,9 +855,11 @@ export default function Adm() {
         id: eq.id,
         nome: eq.nome || 'Equipamento',
         categoria: eq.categoria || '',
+        vertical: eq.vertical || 'construcao',
         locador_nome: profileMap.get(eq.locador_id) || 'Locador',
         status: eq.status || 'disponivel',
-        destaque: eq.destaque || false
+        destaque: eq.destaque || false,
+        selo_verificado: eq.selo_verificado || false
       }))
 
       setEquipamentosAdmin(lista)
@@ -846,6 +893,34 @@ export default function Adm() {
       setError('Erro inesperado ao alterar destaque')
     } finally {
       setToggling(null)
+    }
+  }
+
+  // Estado para controlar toggle de selo
+  const [togglingSelo, setTogglingSelo] = useState<string | null>(null)
+
+  const toggleSelo = async (eqId: string, current: boolean) => {
+    setTogglingSelo(eqId)
+    try {
+      const { error } = await supabase
+        .from('equipamentos')
+        .update({ selo_verificado: !current })
+        .eq('id', eqId)
+
+      if (error) {
+        console.error('[Adm] Erro ao alterar selo:', error)
+        setError(`Erro ao alterar selo: ${error.message}`)
+        return
+      }
+
+      setEquipamentosAdmin(prev =>
+        prev.map(eq => eq.id === eqId ? { ...eq, selo_verificado: !current } : eq)
+      )
+    } catch (err) {
+      console.error('[Adm] Erro ao alterar selo:', err)
+      setError('Erro inesperado ao alterar selo')
+    } finally {
+      setTogglingSelo(null)
     }
   }
 
@@ -1107,10 +1182,10 @@ export default function Adm() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-zinc-900 to-zinc-800 flex items-center justify-center">
+      <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-amber-500 mx-auto mb-4" />
-          <p className="text-white text-lg font-medium">Carregando painel administrativo...</p>
+          <Loader2 className="w-12 h-12 animate-spin text-cta mx-auto mb-4" />
+          <p className="text-foreground text-lg font-medium">Carregando painel administrativo...</p>
         </div>
       </div>
     )
@@ -1121,41 +1196,39 @@ export default function Adm() {
   // =====================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-900 to-zinc-800">
+    <div className="min-h-screen bg-surface">
       {/* Header */}
-      <header className="bg-zinc-950/80 backdrop-blur-sm border-b border-amber-500/20 sticky top-0 z-10">
+      <header className="bg-surface-sidebar/80 backdrop-blur-sm border-b border-cta/20 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link
               to="/"
               className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-white" />
+              <ArrowLeft className="w-5 h-5 text-foreground" />
             </Link>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/20 rounded-xl">
-                <HardHat className="w-8 h-8 text-amber-500" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">LocaObra <span className="text-amber-500">Admin</span></h1>
-                <p className="text-xs text-zinc-400">Painel de Gestão</p>
+              <TraktoLogo size="sm" />
+              <div className="ml-1">
+                <span className="text-sm font-bold text-cta">Admin</span>
+                <p className="text-xs text-foreground-secondary">Painel de Gestão</p>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <button
               onClick={carregarDashboard}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-zinc-900 font-bold rounded-lg hover:bg-amber-400 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-cta text-white font-bold rounded-lg hover:bg-cta transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               <span className="hidden sm:inline">Atualizar</span>
             </button>
-            <span className="text-zinc-400 hidden sm:block text-sm font-medium">
+            <span className="text-foreground-secondary hidden sm:block text-sm font-medium">
               {profile?.nome_empresa || profile?.full_name || 'Admin'}
             </span>
             <button
               onClick={signOut}
-              className="px-4 py-2 text-sm bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700"
+              className="px-4 py-2 text-sm bg-surface-elevated text-foreground rounded-lg hover:bg-glass-hover transition-colors border border-border"
             >
               Sair
             </button>
@@ -1166,7 +1239,7 @@ export default function Adm() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Última atualização */}
         {lastUpdate && (
-          <p className="text-zinc-500 text-sm mb-6 flex items-center gap-2">
+          <p className="text-foreground-muted text-sm mb-6 flex items-center gap-2">
             <Clock className="w-4 h-4" />
             Última atualização: {lastUpdate.toLocaleTimeString('pt-BR')}
           </p>
@@ -1196,64 +1269,64 @@ export default function Adm() {
         ===================================================== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {/* Total de Máquinas */}
-          <div className="bg-zinc-800/80 backdrop-blur-sm rounded-2xl p-5 border border-zinc-700/50 hover:border-amber-500/30 transition-colors">
+          <div className="bg-surface-elevated/80 backdrop-blur-sm rounded-2xl p-5 border border-border hover:border-cta/30 transition-colors">
             <div className="flex items-center justify-between mb-3">
-              <div className="p-3 bg-amber-500/20 rounded-xl">
-                <Package className="w-7 h-7 text-amber-500" />
+              <div className="p-3 bg-cta/20 rounded-xl">
+                <Package className="w-7 h-7 text-cta" />
               </div>
-              <span className="text-3xl font-bold text-white">
+              <span className="text-3xl font-bold text-foreground">
                 {resumo?.total_equipamentos || 0}
               </span>
             </div>
-            <p className="text-zinc-400 text-base font-medium">Total de Máquinas</p>
-            <p className="text-amber-500/80 text-sm mt-1">Cadastradas no sistema</p>
+            <p className="text-foreground-secondary text-base font-medium">Total de Máquinas</p>
+            <p className="text-cta/80 text-sm mt-1">Cadastradas no sistema</p>
           </div>
 
           {/* Locações Ativas */}
-          <div className="bg-zinc-800/80 backdrop-blur-sm rounded-2xl p-5 border border-zinc-700/50 hover:border-green-500/30 transition-colors">
+          <div className="bg-surface-elevated/80 backdrop-blur-sm rounded-2xl p-5 border border-border hover:border-green-500/30 transition-colors">
             <div className="flex items-center justify-between mb-3">
               <div className="p-3 bg-green-500/20 rounded-xl">
                 <TrendingUp className="w-7 h-7 text-green-500" />
               </div>
-              <span className="text-3xl font-bold text-white">
+              <span className="text-3xl font-bold text-foreground">
                 {resumo?.locacoes_ativas || 0}
               </span>
             </div>
-            <p className="text-zinc-400 text-base font-medium">Locações Ativas</p>
+            <p className="text-foreground-secondary text-base font-medium">Locações Ativas</p>
             <p className="text-green-500/80 text-sm mt-1">Em andamento agora</p>
           </div>
 
           {/* Usuários Pendentes de Reset */}
-          <div className={`bg-zinc-800/80 backdrop-blur-sm rounded-2xl p-5 border transition-colors ${
+          <div className={`bg-surface-elevated/80 backdrop-blur-sm rounded-2xl p-5 border transition-colors ${
             (resumo?.usuarios_pendentes_reset || 0) > 0
               ? 'border-red-500/50 animate-pulse'
-              : 'border-zinc-700/50 hover:border-orange-500/30'
+              : 'border-border hover:border-cta/30'
           }`}>
             <div className="flex items-center justify-between mb-3">
               <div className={`p-3 rounded-xl ${
                 (resumo?.usuarios_pendentes_reset || 0) > 0
                   ? 'bg-red-500/30'
-                  : 'bg-orange-500/20'
+                  : 'bg-cta/20'
               }`}>
                 <KeyRound className={`w-7 h-7 ${
                   (resumo?.usuarios_pendentes_reset || 0) > 0
                     ? 'text-red-500'
-                    : 'text-orange-500'
+                    : 'text-cta'
                 }`} />
               </div>
               <span className={`text-3xl font-bold ${
                 (resumo?.usuarios_pendentes_reset || 0) > 0
                   ? 'text-red-400'
-                  : 'text-white'
+                  : 'text-foreground'
               }`}>
                 {resumo?.usuarios_pendentes_reset || 0}
               </span>
             </div>
-            <p className="text-zinc-400 text-base font-medium">Pendentes de Reset</p>
+            <p className="text-foreground-secondary text-base font-medium">Pendentes de Reset</p>
             <p className={`text-sm mt-1 ${
               (resumo?.usuarios_pendentes_reset || 0) > 0
                 ? 'text-red-400/80 font-medium'
-                : 'text-orange-500/80'
+                : 'text-cta/80'
             }`}>
               {(resumo?.usuarios_pendentes_reset || 0) > 0
                 ? 'Ação necessária!'
@@ -1262,16 +1335,16 @@ export default function Adm() {
           </div>
 
           {/* Locadores Verificados */}
-          <div className="bg-zinc-800/80 backdrop-blur-sm rounded-2xl p-5 border border-zinc-700/50 hover:border-yellow-500/30 transition-colors">
+          <div className="bg-surface-elevated/80 backdrop-blur-sm rounded-2xl p-5 border border-border hover:border-yellow-500/30 transition-colors">
             <div className="flex items-center justify-between mb-3">
               <div className="p-3 bg-yellow-500/20 rounded-xl">
                 <BadgeCheck className="w-7 h-7 text-yellow-500" />
               </div>
-              <span className="text-3xl font-bold text-white">
+              <span className="text-3xl font-bold text-foreground">
                 {resumo?.locadores_verificados || 0}
               </span>
             </div>
-            <p className="text-zinc-400 text-base font-medium">Locadores Verificados</p>
+            <p className="text-foreground-secondary text-base font-medium">Locadores Verificados</p>
             <p className="text-yellow-500/80 text-sm mt-1">
               de {resumo?.total_locadores || 0} locadores
             </p>
@@ -1281,13 +1354,13 @@ export default function Adm() {
         {/* =====================================================
             SISTEMA DE ABAS
         ===================================================== */}
-        <div className="flex gap-1 mb-8 bg-zinc-800/60 backdrop-blur-sm rounded-xl p-1 border border-zinc-700/50">
+        <div className="flex gap-1 mb-8 bg-surface-elevated/60 backdrop-blur-sm rounded-xl p-1 border border-border">
           <button
             onClick={() => handleTabChange('usuarios')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
               tabAtiva === 'usuarios'
-                ? 'bg-amber-500 text-zinc-900 shadow-lg shadow-amber-500/20'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'
+                ? 'bg-cta text-white shadow-lg shadow-cta/20'
+                : 'text-foreground-secondary hover:text-foreground hover:bg-glass-hover'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -1297,8 +1370,8 @@ export default function Adm() {
             onClick={() => handleTabChange('analytics')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
               tabAtiva === 'analytics'
-                ? 'bg-amber-500 text-zinc-900 shadow-lg shadow-amber-500/20'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'
+                ? 'bg-cta text-white shadow-lg shadow-cta/20'
+                : 'text-foreground-secondary hover:text-foreground hover:bg-glass-hover'
             }`}
           >
             <BarChart3 className="w-4 h-4" />
@@ -1308,8 +1381,8 @@ export default function Adm() {
             onClick={() => handleTabChange('equipamentos')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
               tabAtiva === 'equipamentos'
-                ? 'bg-amber-500 text-zinc-900 shadow-lg shadow-amber-500/20'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-700/50'
+                ? 'bg-cta text-white shadow-lg shadow-cta/20'
+                : 'text-foreground-secondary hover:text-foreground hover:bg-glass-hover'
             }`}
           >
             <Package className="w-4 h-4" />
@@ -1329,16 +1402,16 @@ export default function Adm() {
         {/* =====================================================
             GESTÃO DE USUÁRIOS - TABELA PRO
         ===================================================== */}
-        <div className="bg-zinc-800/60 backdrop-blur-sm rounded-2xl border border-zinc-700/50 overflow-hidden mb-8">
-          <div className="p-6 border-b border-zinc-700/50">
+        <div className="bg-surface-elevated/60 backdrop-blur-sm rounded-2xl border border-border overflow-hidden mb-8">
+          <div className="p-6 border-b border-border">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-500/20 rounded-lg">
-                  <UserCog className="w-6 h-6 text-amber-500" />
+                <div className="p-2 bg-cta/20 rounded-lg">
+                  <UserCog className="w-6 h-6 text-cta" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Gestão de Usuários</h2>
-                  <p className="text-zinc-400 text-sm">
+                  <h2 className="text-xl font-bold text-foreground">Gestão de Usuários</h2>
+                  <p className="text-foreground-secondary text-sm">
                     {usuariosFiltrados.length} de {usuarios.length} usuários
                   </p>
                 </div>
@@ -1348,13 +1421,13 @@ export default function Adm() {
               <div className="flex flex-col sm:flex-row gap-3">
                 {/* Campo de Busca */}
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-muted" />
                   <input
                     type="text"
                     value={buscaUsuario}
                     onChange={(e) => setBuscaUsuario(e.target.value)}
                     placeholder="Buscar nome, email ou empresa..."
-                    className="w-full sm:w-72 pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    className="w-full sm:w-72 pl-10 pr-4 py-2.5 bg-surface-inset border border-border rounded-lg text-foreground text-sm placeholder:text-foreground-muted focus:ring-2 focus:ring-cta focus:border-cta outline-none"
                   />
                 </div>
 
@@ -1364,8 +1437,8 @@ export default function Adm() {
                     onClick={() => setFiltroAtivo('todos')}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       filtroAtivo === 'todos'
-                        ? 'bg-amber-500 text-zinc-900'
-                        : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-700 border border-zinc-700'
+                        ? 'bg-cta text-white'
+                        : 'bg-surface-inset text-foreground-secondary hover:bg-glass-hover border border-border'
                     }`}
                   >
                     Todos
@@ -1375,7 +1448,7 @@ export default function Adm() {
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
                       filtroAtivo === 'locadores'
                         ? 'bg-purple-500 text-white'
-                        : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-700 border border-zinc-700'
+                        : 'bg-surface-inset text-foreground-secondary hover:bg-glass-hover border border-border'
                     }`}
                   >
                     <Building2 className="w-4 h-4" />
@@ -1386,7 +1459,7 @@ export default function Adm() {
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
                       filtroAtivo === 'locatarios'
                         ? 'bg-cyan-500 text-white'
-                        : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-700 border border-zinc-700'
+                        : 'bg-surface-inset text-foreground-secondary hover:bg-glass-hover border border-border'
                     }`}
                   >
                     <Users className="w-4 h-4" />
@@ -1397,7 +1470,7 @@ export default function Adm() {
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
                       filtroAtivo === 'pendentes_reset'
                         ? 'bg-red-500 text-white'
-                        : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-700 border border-zinc-700'
+                        : 'bg-surface-inset text-foreground-secondary hover:bg-glass-hover border border-border'
                     } ${(resumo?.usuarios_pendentes_reset || 0) > 0 ? 'animate-pulse' : ''}`}
                   >
                     <AlertTriangle className="w-4 h-4" />
@@ -1411,32 +1484,33 @@ export default function Adm() {
           {/* Tabela de Usuários */}
           {loadingUsuarios ? (
             <div className="p-12 text-center">
-              <Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto mb-3" />
-              <p className="text-zinc-400">Carregando usuários...</p>
+              <Loader2 className="w-8 h-8 animate-spin text-cta mx-auto mb-3" />
+              <p className="text-foreground-secondary">Carregando usuários...</p>
             </div>
           ) : usuariosFiltrados.length === 0 ? (
             <div className="p-12 text-center">
-              <Users className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-              <p className="text-zinc-400 text-lg">Nenhum usuário encontrado</p>
-              <p className="text-zinc-500 text-sm mt-1">Tente ajustar os filtros ou a busca</p>
+              <Users className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+              <p className="text-foreground-secondary text-lg">Nenhum usuário encontrado</p>
+              <p className="text-foreground-muted text-sm mt-1">Tente ajustar os filtros ou a busca</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-zinc-900/50">
-                    <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Usuário</th>
-                    <th className="text-center text-zinc-400 font-semibold px-4 py-4 text-sm">Tipo</th>
-                    <th className="text-center text-zinc-400 font-semibold px-4 py-4 text-sm">Verificado</th>
-                    <th className="text-center text-zinc-400 font-semibold px-4 py-4 text-sm">Status</th>
-                    <th className="text-right text-zinc-400 font-semibold px-6 py-4 text-sm">Ações</th>
+                  <tr className="bg-surface-inset/50">
+                    <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Usuário</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Tipo</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Verificado</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">PRO</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Status</th>
+                    <th className="text-right text-foreground-secondary font-semibold px-6 py-4 text-sm">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {usuariosFiltrados.map((usuario) => (
                     <tr
                       key={usuario.id}
-                      className={`border-t border-zinc-700/30 hover:bg-zinc-800/50 transition-colors ${
+                      className={`border-t border-border-subtle hover:bg-glass-hover/50 transition-colors ${
                         usuario.solicitou_reset ? 'bg-red-900/10' : ''
                       }`}
                     >
@@ -1455,16 +1529,21 @@ export default function Adm() {
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="text-white font-medium text-base">{usuario.nome}</p>
+                              <p className="text-foreground font-medium text-base">{usuario.nome}</p>
+                              {usuario.destacado && (
+                                <span title="Parceiro PRO" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px] font-bold">
+                                  <Sparkles className="w-3 h-3" /> PRO
+                                </span>
+                              )}
                               {usuario.verificado && (
                                 <span title="Verificado">
                                   <BadgeCheck className="w-5 h-5 text-yellow-500" />
                                 </span>
                               )}
                             </div>
-                            <p className="text-zinc-500 text-sm">{usuario.email}</p>
+                            <p className="text-foreground-muted text-sm">{usuario.email}</p>
                             {usuario.nome_empresa && (
-                              <p className="text-zinc-400 text-xs mt-0.5">{usuario.nome_empresa}</p>
+                              <p className="text-foreground-secondary text-xs mt-0.5">{usuario.nome_empresa}</p>
                             )}
                           </div>
                         </div>
@@ -1490,7 +1569,7 @@ export default function Adm() {
                             className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
                               usuario.verificado
                                 ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                                : 'bg-zinc-700/50 text-zinc-400 hover:bg-zinc-700'
+                                : 'bg-surface-elevated text-foreground-secondary hover:bg-glass-hover'
                             }`}
                             title={usuario.verificado ? 'Remover verificação' : 'Verificar locador'}
                           >
@@ -1506,7 +1585,36 @@ export default function Adm() {
                             </span>
                           </button>
                         ) : (
-                          <span className="text-zinc-600 text-xs">N/A</span>
+                          <span className="text-foreground-muted text-xs">N/A</span>
+                        )}
+                      </td>
+
+                      {/* Coluna: PRO (Destaque Pago) */}
+                      <td className="px-4 py-4 text-center">
+                        {usuario.tipo_usuario === 'locador' ? (
+                          <button
+                            onClick={() => toggleDestacado(usuario)}
+                            disabled={alternandoDestacado === usuario.id}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                              usuario.destacado
+                                ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                                : 'bg-surface-elevated text-foreground-secondary hover:bg-glass-hover'
+                            }`}
+                            title={usuario.destacado ? 'Remover destaque PRO' : 'Ativar destaque PRO'}
+                          >
+                            {alternandoDestacado === usuario.id ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : usuario.destacado ? (
+                              <ToggleRight className="w-6 h-6" />
+                            ) : (
+                              <ToggleLeft className="w-6 h-6" />
+                            )}
+                            <span className="text-xs font-medium">
+                              {usuario.destacado ? 'PRO' : 'Ativar'}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-foreground-muted text-xs">N/A</span>
                         )}
                       </td>
 
@@ -1546,7 +1654,7 @@ export default function Adm() {
                             className={`p-2 rounded-lg transition-colors ${
                               usuario.solicitou_reset
                                 ? 'bg-red-500 text-white hover:bg-red-600 animate-bounce'
-                                : 'bg-amber-500/20 text-amber-500 hover:bg-amber-500/30'
+                                : 'bg-cta/20 text-cta hover:bg-cta/30'
                             }`}
                             title="Resetar Senha"
                           >
@@ -1557,7 +1665,7 @@ export default function Adm() {
                           <button
                             onClick={() => excluirUsuario(usuario)}
                             disabled={excluindoUsuario === usuario.id}
-                            className="p-2 bg-zinc-700/50 text-zinc-400 rounded-lg hover:bg-red-500/30 hover:text-red-400 transition-colors"
+                            className="p-2 bg-surface-elevated text-foreground-secondary rounded-lg hover:bg-red-500/30 hover:text-red-400 transition-colors"
                             title="Excluir Usuário"
                           >
                             {excluindoUsuario === usuario.id ? (
@@ -1579,27 +1687,27 @@ export default function Adm() {
         {/* =====================================================
             TABELA: VOLUME POR LOCADORA
         ===================================================== */}
-        <div className="bg-zinc-800/60 backdrop-blur-sm rounded-2xl border border-zinc-700/50 overflow-hidden">
-          <div className="p-6 border-b border-zinc-700/50">
-            <h2 className="text-xl font-bold text-white">Volume por Locadora</h2>
-            <p className="text-zinc-400 mt-1 text-sm">Clique em uma linha para ver detalhes</p>
+        <div className="bg-surface-elevated/60 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+          <div className="p-6 border-b border-border">
+            <h2 className="text-xl font-bold text-foreground">Volume por Locadora</h2>
+            <p className="text-foreground-secondary mt-1 text-sm">Clique em uma linha para ver detalhes</p>
           </div>
 
           {locadoras.length === 0 ? (
             <div className="p-12 text-center">
-              <Building2 className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-              <p className="text-zinc-400 text-lg">Nenhuma locadora cadastrada ainda</p>
+              <Building2 className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+              <p className="text-foreground-secondary text-lg">Nenhuma locadora cadastrada ainda</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-zinc-900/50">
-                    <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">#</th>
-                    <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Locadora</th>
-                    <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Equipamentos</th>
-                    <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Locações</th>
-                    <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm"></th>
+                  <tr className="bg-surface-inset/50">
+                    <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">#</th>
+                    <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Locadora</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Equipamentos</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Locações</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1607,10 +1715,10 @@ export default function Adm() {
                     <tr
                       key={locadora.id}
                       onClick={() => carregarDetalheLocador(locadora.id, locadora.nome)}
-                      className="border-t border-zinc-700/30 hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                      className="border-t border-border-subtle hover:bg-glass-hover/50 transition-colors cursor-pointer group"
                     >
                       <td className="px-6 py-4">
-                        <span className={`text-lg font-bold ${index < 3 ? 'text-amber-500' : 'text-zinc-500'}`}>
+                        <span className={`text-lg font-bold ${index < 3 ? 'text-cta' : 'text-foreground-muted'}`}>
                           {index + 1}º
                         </span>
                       </td>
@@ -1619,19 +1727,19 @@ export default function Adm() {
                           <div className="p-2 bg-purple-500/20 rounded-lg">
                             <Building2 className="w-5 h-5 text-purple-400" />
                           </div>
-                          <span className="text-white font-medium text-base">{locadora.nome}</span>
+                          <span className="text-foreground font-medium text-base">{locadora.nome}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="text-zinc-300 text-lg font-medium">{locadora.total_equipamentos}</span>
+                        <span className="text-foreground-secondary text-lg font-medium">{locadora.total_equipamentos}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className={`text-2xl font-bold ${locadora.total_locacoes > 0 ? 'text-green-400' : 'text-zinc-500'}`}>
+                        <span className={`text-2xl font-bold ${locadora.total_locacoes > 0 ? 'text-green-400' : 'text-foreground-muted'}`}>
                           {locadora.total_locacoes}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <Eye className="w-5 h-5 text-zinc-600 group-hover:text-amber-500 transition-colors mx-auto" />
+                        <Eye className="w-5 h-5 text-foreground-muted group-hover:text-cta transition-colors mx-auto" />
                       </td>
                     </tr>
                   ))}
@@ -1650,60 +1758,60 @@ export default function Adm() {
           <div className="space-y-6">
             {loadingAnalytics ? (
               <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-12 h-12 animate-spin text-amber-500" />
-                <p className="text-white ml-4 text-lg">Carregando analytics...</p>
+                <Loader2 className="w-12 h-12 animate-spin text-cta" />
+                <p className="text-foreground ml-4 text-lg">Carregando analytics...</p>
               </div>
             ) : (
               <>
                 {/* Panel 1: Ranking de Clientes */}
-                <div className="bg-zinc-800/60 backdrop-blur-sm rounded-2xl border border-zinc-700/50 overflow-hidden">
-                  <div className="p-6 border-b border-zinc-700/50 flex items-center gap-3">
-                    <div className="p-2 bg-amber-500/20 rounded-lg">
-                      <TrendingUp className="w-6 h-6 text-amber-500" />
+                <div className="bg-surface-elevated/60 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+                  <div className="p-6 border-b border-border flex items-center gap-3">
+                    <div className="p-2 bg-cta/20 rounded-lg">
+                      <TrendingUp className="w-6 h-6 text-cta" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">Ranking de Clientes</h2>
-                      <p className="text-zinc-400 text-sm">Top locatarios por volume de locacoes</p>
+                      <h2 className="text-xl font-bold text-foreground">Ranking de Clientes</h2>
+                      <p className="text-foreground-secondary text-sm">Top locatarios por volume de locacoes</p>
                     </div>
                   </div>
                   {rankingClientes.length === 0 ? (
                     <div className="p-12 text-center">
-                      <Users className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-                      <p className="text-zinc-400 text-lg">Nenhum dado de ranking disponivel</p>
+                      <Users className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+                      <p className="text-foreground-secondary text-lg">Nenhum dado de ranking disponivel</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="bg-zinc-900/50">
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">#</th>
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Nome</th>
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Email</th>
-                            <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Total Locacoes</th>
-                            <th className="text-right text-zinc-400 font-semibold px-6 py-4 text-sm">Total Gasto (R$)</th>
+                          <tr className="bg-surface-inset/50">
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">#</th>
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Nome</th>
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Email</th>
+                            <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Total Locacoes</th>
+                            <th className="text-right text-foreground-secondary font-semibold px-6 py-4 text-sm">Total Gasto (R$)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {rankingClientes.map((cliente, idx) => (
                             <tr
                               key={idx}
-                              className={`border-t border-zinc-700/30 transition-colors ${
-                                idx < 3 ? 'bg-amber-500/10 hover:bg-amber-500/20' : 'hover:bg-zinc-800/50'
+                              className={`border-t border-border-subtle transition-colors ${
+                                idx < 3 ? 'bg-cta/10 hover:bg-cta/20' : 'hover:bg-glass-hover/50'
                               }`}
                             >
                               <td className="px-6 py-4">
-                                <span className={`text-lg font-bold ${idx < 3 ? 'text-amber-500' : 'text-zinc-500'}`}>
+                                <span className={`text-lg font-bold ${idx < 3 ? 'text-cta' : 'text-foreground-muted'}`}>
                                   {idx + 1}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="text-white font-medium">{cliente.nome}</span>
+                                <span className="text-foreground font-medium">{cliente.nome}</span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="text-zinc-400 text-sm">{cliente.email}</span>
+                                <span className="text-foreground-secondary text-sm">{cliente.email}</span>
                               </td>
                               <td className="px-6 py-4 text-center">
-                                <span className="text-white font-semibold text-lg">{cliente.total_locacoes}</span>
+                                <span className="text-foreground font-semibold text-lg">{cliente.total_locacoes}</span>
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <span className="text-green-400 font-semibold">
@@ -1719,56 +1827,56 @@ export default function Adm() {
                 </div>
 
                 {/* Panel 2: Inventario Quente */}
-                <div className="bg-zinc-800/60 backdrop-blur-sm rounded-2xl border border-zinc-700/50 overflow-hidden">
-                  <div className="p-6 border-b border-zinc-700/50 flex items-center gap-3">
+                <div className="bg-surface-elevated/60 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+                  <div className="p-6 border-b border-border flex items-center gap-3">
                     <div className="p-2 bg-red-500/20 rounded-lg">
                       <BarChart3 className="w-6 h-6 text-red-500" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">Inventario Quente</h2>
-                      <p className="text-zinc-400 text-sm">Equipamentos mais locados</p>
+                      <h2 className="text-xl font-bold text-foreground">Inventario Quente</h2>
+                      <p className="text-foreground-secondary text-sm">Equipamentos mais locados</p>
                     </div>
                   </div>
                   {inventarioQuente.length === 0 ? (
                     <div className="p-12 text-center">
-                      <Package className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-                      <p className="text-zinc-400 text-lg">Nenhum dado de inventario disponivel</p>
+                      <Package className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+                      <p className="text-foreground-secondary text-lg">Nenhum dado de inventario disponivel</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="bg-zinc-900/50">
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">#</th>
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Equipamento</th>
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Categoria</th>
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Locador</th>
-                            <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Locacoes</th>
-                            <th className="text-right text-zinc-400 font-semibold px-6 py-4 text-sm">Receita (R$)</th>
+                          <tr className="bg-surface-inset/50">
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">#</th>
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Equipamento</th>
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Categoria</th>
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Locador</th>
+                            <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Locacoes</th>
+                            <th className="text-right text-foreground-secondary font-semibold px-6 py-4 text-sm">Receita (R$)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {inventarioQuente.map((item, idx) => (
                             <tr
                               key={idx}
-                              className="border-t border-zinc-700/30 hover:bg-zinc-800/50 transition-colors"
+                              className="border-t border-border-subtle hover:bg-glass-hover/50 transition-colors"
                             >
                               <td className="px-6 py-4">
-                                <span className={`text-lg font-bold ${idx < 3 ? 'text-amber-500' : 'text-zinc-500'}`}>
+                                <span className={`text-lg font-bold ${idx < 3 ? 'text-cta' : 'text-foreground-muted'}`}>
                                   {idx + 1}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="text-white font-medium">{item.equipamento}</span>
+                                <span className="text-foreground font-medium">{item.equipamento}</span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="text-zinc-400">{item.categoria}</span>
+                                <span className="text-foreground-secondary">{item.categoria}</span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="text-zinc-300">{item.locador}</span>
+                                <span className="text-foreground-secondary">{item.locador}</span>
                               </td>
                               <td className="px-6 py-4 text-center">
-                                <span className="text-white font-semibold text-lg">{item.locacoes}</span>
+                                <span className="text-foreground font-semibold text-lg">{item.locacoes}</span>
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <span className="text-green-400 font-semibold">
@@ -1784,43 +1892,43 @@ export default function Adm() {
                 </div>
 
                 {/* Panel 3: Receita Mensal */}
-                <div className="bg-zinc-800/60 backdrop-blur-sm rounded-2xl border border-zinc-700/50 overflow-hidden">
-                  <div className="p-6 border-b border-zinc-700/50 flex items-center gap-3">
+                <div className="bg-surface-elevated/60 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+                  <div className="p-6 border-b border-border flex items-center gap-3">
                     <div className="p-2 bg-green-500/20 rounded-lg">
                       <TrendingUp className="w-6 h-6 text-green-500" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">Receita Mensal</h2>
-                      <p className="text-zinc-400 text-sm">Evolucao da receita por mes</p>
+                      <h2 className="text-xl font-bold text-foreground">Receita Mensal</h2>
+                      <p className="text-foreground-secondary text-sm">Evolucao da receita por mes</p>
                     </div>
                   </div>
                   {receitaMensal.length === 0 ? (
                     <div className="p-12 text-center">
-                      <BarChart3 className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-                      <p className="text-zinc-400 text-lg">Nenhum dado de receita disponivel</p>
+                      <BarChart3 className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+                      <p className="text-foreground-secondary text-lg">Nenhum dado de receita disponivel</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="bg-zinc-900/50">
-                            <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Mes</th>
-                            <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Locacoes</th>
-                            <th className="text-right text-zinc-400 font-semibold px-6 py-4 text-sm">Receita (R$)</th>
-                            <th className="text-right text-zinc-400 font-semibold px-6 py-4 text-sm">Variacao</th>
+                          <tr className="bg-surface-inset/50">
+                            <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Mes</th>
+                            <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Locacoes</th>
+                            <th className="text-right text-foreground-secondary font-semibold px-6 py-4 text-sm">Receita (R$)</th>
+                            <th className="text-right text-foreground-secondary font-semibold px-6 py-4 text-sm">Variacao</th>
                           </tr>
                         </thead>
                         <tbody>
                           {receitaMensal.map((mes, idx) => (
                             <tr
                               key={idx}
-                              className="border-t border-zinc-700/30 hover:bg-zinc-800/50 transition-colors"
+                              className="border-t border-border-subtle hover:bg-glass-hover/50 transition-colors"
                             >
                               <td className="px-6 py-4">
-                                <span className="text-white font-medium">{mes.mes_label}</span>
+                                <span className="text-foreground font-medium">{mes.mes_label}</span>
                               </td>
                               <td className="px-6 py-4 text-center">
-                                <span className="text-white font-semibold">{mes.total_locacoes}</span>
+                                <span className="text-foreground font-semibold">{mes.total_locacoes}</span>
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <span className="text-green-400 font-semibold">
@@ -1840,7 +1948,7 @@ export default function Adm() {
                                     {Math.abs(mes.variacao_percentual).toFixed(1)}%
                                   </span>
                                 ) : (
-                                  <span className="text-zinc-600 text-sm">--</span>
+                                  <span className="text-foreground-muted text-sm">--</span>
                                 )}
                               </td>
                             </tr>
@@ -1859,28 +1967,28 @@ export default function Adm() {
             ABA: EQUIPAMENTOS
         ===================================================== */}
         {tabAtiva === 'equipamentos' && (
-          <div className="bg-zinc-800/60 backdrop-blur-sm rounded-2xl border border-zinc-700/50 overflow-hidden">
-            <div className="p-6 border-b border-zinc-700/50">
+          <div className="bg-surface-elevated/60 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+            <div className="p-6 border-b border-border">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-500/20 rounded-lg">
-                    <Package className="w-6 h-6 text-amber-500" />
+                  <div className="p-2 bg-cta/20 rounded-lg">
+                    <Package className="w-6 h-6 text-cta" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">Gestao de Equipamentos</h2>
-                    <p className="text-zinc-400 text-sm">
+                    <h2 className="text-xl font-bold text-foreground">Gestao de Equipamentos</h2>
+                    <p className="text-foreground-secondary text-sm">
                       {equipamentosAdminFiltrados.length} de {equipamentosAdmin.length} equipamentos
                     </p>
                   </div>
                 </div>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-muted" />
                   <input
                     type="text"
                     value={buscaEquipAdmin}
                     onChange={(e) => setBuscaEquipAdmin(e.target.value)}
                     placeholder="Buscar equipamento, categoria ou locador..."
-                    className="w-full sm:w-80 pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    className="w-full sm:w-80 pl-10 pr-4 py-2.5 bg-surface-inset border border-border rounded-lg text-foreground text-sm placeholder:text-foreground-muted focus:ring-2 focus:ring-cta focus:border-cta outline-none"
                   />
                 </div>
               </div>
@@ -1888,62 +1996,89 @@ export default function Adm() {
 
             {loadingEquipAdmin ? (
               <div className="p-12 text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto mb-3" />
-                <p className="text-zinc-400">Carregando equipamentos...</p>
+                <Loader2 className="w-8 h-8 animate-spin text-cta mx-auto mb-3" />
+                <p className="text-foreground-secondary">Carregando equipamentos...</p>
               </div>
             ) : equipamentosAdminFiltrados.length === 0 ? (
               <div className="p-12 text-center">
-                <Package className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-                <p className="text-zinc-400 text-lg">Nenhum equipamento encontrado</p>
-                <p className="text-zinc-500 text-sm mt-1">Tente ajustar a busca</p>
+                <Package className="w-12 h-12 text-foreground-muted mx-auto mb-3" />
+                <p className="text-foreground-secondary text-lg">Nenhum equipamento encontrado</p>
+                <p className="text-foreground-muted text-sm mt-1">Tente ajustar a busca</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-zinc-900/50">
-                      <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Nome</th>
-                      <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Categoria</th>
-                      <th className="text-left text-zinc-400 font-semibold px-6 py-4 text-sm">Locador</th>
-                      <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Status</th>
-                      <th className="text-center text-zinc-400 font-semibold px-6 py-4 text-sm">Destaque</th>
+                    <tr className="bg-surface-inset/50">
+                      <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Nome</th>
+                      <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Categoria</th>
+                      <th className="text-left text-foreground-secondary font-semibold px-6 py-4 text-sm">Locador</th>
+                      <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Status</th>
+                      <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Selo</th>
+                      <th className="text-center text-foreground-secondary font-semibold px-6 py-4 text-sm">Destaque</th>
                     </tr>
                   </thead>
                   <tbody>
                     {equipamentosAdminFiltrados.map((eq) => (
                       <tr
                         key={eq.id}
-                        className="border-t border-zinc-700/30 hover:bg-zinc-800/50 transition-colors"
+                        className="border-t border-border-subtle hover:bg-glass-hover/50 transition-colors"
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             {eq.destaque && (
                               <Crown className="w-5 h-5 text-yellow-500 flex-shrink-0" />
                             )}
-                            <span className="text-white font-medium">{eq.nome}</span>
+                            <span className="text-foreground font-medium">{eq.nome}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-zinc-400">{eq.categoria}</span>
+                          <span className="text-foreground-secondary">{eq.categoria}</span>
+                          {(eq as any).vertical && (eq as any).vertical !== 'construcao' && (
+                            <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-surface-elevated text-foreground-secondary uppercase">{(eq as any).vertical}</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-zinc-300">{eq.locador_nome}</span>
+                          <span className="text-foreground-secondary">{eq.locador_nome}</span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
                             eq.status === 'disponivel'
                               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                               : eq.status === 'locado'
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                              : 'bg-zinc-700/50 text-zinc-400 border border-zinc-600/30'
+                              ? 'bg-cta/20 text-cta border border-cta/30'
+                              : 'bg-surface-elevated text-foreground-secondary border border-border-subtle'
                           }`}>
                             <span className={`w-2 h-2 rounded-full ${
                               eq.status === 'disponivel' ? 'bg-green-400'
-                              : eq.status === 'locado' ? 'bg-amber-400'
-                              : 'bg-zinc-400'
+                              : eq.status === 'locado' ? 'bg-cta'
+                              : 'bg-foreground-muted'
                             }`} />
                             {eq.status === 'disponivel' ? 'Disponivel' : eq.status === 'locado' ? 'Locado' : eq.status}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => toggleSelo(eq.id, eq.selo_verificado)}
+                            disabled={togglingSelo === eq.id}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                              eq.selo_verificado
+                                ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                : 'bg-surface-elevated text-foreground-secondary hover:bg-glass-hover'
+                            }`}
+                            title={eq.selo_verificado ? 'Remover selo' : 'Validar selo'}
+                          >
+                            {togglingSelo === eq.id ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : eq.selo_verificado ? (
+                              <BadgeCheck className="w-5 h-5" />
+                            ) : (
+                              <Shield className="w-5 h-5" />
+                            )}
+                            <span className="text-xs font-medium">
+                              {eq.selo_verificado ? 'Verificado' : 'Verificar'}
+                            </span>
+                          </button>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <button
@@ -1952,7 +2087,7 @@ export default function Adm() {
                             className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
                               eq.destaque
                                 ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                                : 'bg-zinc-700/50 text-zinc-400 hover:bg-zinc-700'
+                                : 'bg-surface-elevated text-foreground-secondary hover:bg-glass-hover'
                             }`}
                             title={eq.destaque ? 'Remover destaque' : 'Promover como destaque'}
                           >
@@ -1983,14 +2118,14 @@ export default function Adm() {
       ===================================================== */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 rounded-2xl border border-zinc-700 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-zinc-700 flex items-center justify-between">
+          <div className="bg-surface-inset rounded-2xl border border-border w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-border flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-foreground">
                   {loadingDetalhe ? 'Carregando...' : detalheLocador?.nome || 'Detalhes'}
                 </h2>
                 {detalheLocador && (
-                  <p className="text-zinc-400 mt-1 text-sm">
+                  <p className="text-foreground-secondary mt-1 text-sm">
                     {detalheLocador.email}
                     {detalheLocador.telefone && ` | ${detalheLocador.telefone}`}
                   </p>
@@ -1998,16 +2133,16 @@ export default function Adm() {
               </div>
               <button
                 onClick={fecharModal}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                className="p-2 hover:bg-glass-hover rounded-lg transition-colors"
               >
-                <X className="w-6 h-6 text-zinc-400" />
+                <X className="w-6 h-6 text-foreground-secondary" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
               {loadingDetalhe ? (
                 <div className="flex items-center justify-center py-16">
-                  <Loader2 className="w-12 h-12 animate-spin text-amber-500" />
+                  <Loader2 className="w-12 h-12 animate-spin text-cta" />
                 </div>
               ) : detalheLocador ? (
                 <div className="space-y-6">
@@ -2017,7 +2152,7 @@ export default function Adm() {
                       <div className="flex items-center gap-3">
                         <Package className="w-8 h-8 text-blue-400" />
                         <div>
-                          <p className="text-3xl font-bold text-white">{detalheLocador.total_equipamentos}</p>
+                          <p className="text-3xl font-bold text-foreground">{detalheLocador.total_equipamentos}</p>
                           <p className="text-blue-300 text-sm">Equipamentos</p>
                         </div>
                       </div>
@@ -2026,7 +2161,7 @@ export default function Adm() {
                       <div className="flex items-center gap-3">
                         <TrendingUp className="w-8 h-8 text-green-400" />
                         <div>
-                          <p className="text-3xl font-bold text-white">{detalheLocador.locacoes_ativas}</p>
+                          <p className="text-3xl font-bold text-foreground">{detalheLocador.locacoes_ativas}</p>
                           <p className="text-green-300 text-sm">Locações Ativas</p>
                         </div>
                       </div>
@@ -2034,22 +2169,22 @@ export default function Adm() {
                   </div>
 
                   {/* Lista de Equipamentos */}
-                  <div className="bg-zinc-800/50 rounded-xl border border-zinc-700 overflow-hidden">
-                    <div className="p-4 border-b border-zinc-700 flex items-center gap-2">
-                      <Package className="w-5 h-5 text-amber-500" />
-                      <h3 className="text-base font-semibold text-white">Equipamentos</h3>
+                  <div className="bg-surface-elevated/50 rounded-xl border border-border overflow-hidden">
+                    <div className="p-4 border-b border-border flex items-center gap-2">
+                      <Package className="w-5 h-5 text-cta" />
+                      <h3 className="text-base font-semibold text-foreground">Equipamentos</h3>
                     </div>
                     {detalheLocador.equipamentos.length === 0 ? (
-                      <div className="p-6 text-center text-zinc-400">
+                      <div className="p-6 text-center text-foreground-secondary">
                         Nenhum equipamento cadastrado
                       </div>
                     ) : (
-                      <div className="divide-y divide-zinc-700/50">
+                      <div className="divide-y divide-border">
                         {detalheLocador.equipamentos.map((eq) => (
                           <div key={eq.id} className="p-4 flex items-center justify-between">
                             <div>
-                              <p className="text-white font-medium">{eq.nome}</p>
-                              <p className="text-zinc-500 text-sm">{eq.categoria}</p>
+                              <p className="text-foreground font-medium">{eq.nome}</p>
+                              <p className="text-foreground-muted text-sm">{eq.categoria}</p>
                             </div>
                             <div className="text-right">
                               {eq.status === 'disponivel' ? (
@@ -2059,12 +2194,12 @@ export default function Adm() {
                                 </span>
                               ) : (
                                 <div>
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm font-medium">
-                                    <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-cta/20 text-cta rounded-full text-sm font-medium">
+                                    <span className="w-2 h-2 bg-cta rounded-full"></span>
                                     Locado
                                   </span>
                                   {eq.cliente_atual && (
-                                    <p className="text-zinc-500 text-xs mt-1">{eq.cliente_atual}</p>
+                                    <p className="text-foreground-muted text-xs mt-1">{eq.cliente_atual}</p>
                                   )}
                                 </div>
                               )}
@@ -2076,44 +2211,44 @@ export default function Adm() {
                   </div>
 
                   {/* Histórico de Locações */}
-                  <div className="bg-zinc-800/50 rounded-xl border border-zinc-700 overflow-hidden">
-                    <div className="p-4 border-b border-zinc-700 flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-amber-500" />
-                      <h3 className="text-base font-semibold text-white">Histórico de Locações</h3>
+                  <div className="bg-surface-elevated/50 rounded-xl border border-border overflow-hidden">
+                    <div className="p-4 border-b border-border flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-cta" />
+                      <h3 className="text-base font-semibold text-foreground">Histórico de Locações</h3>
                     </div>
                     {detalheLocador.historico.length === 0 ? (
-                      <div className="p-6 text-center text-zinc-400">
+                      <div className="p-6 text-center text-foreground-secondary">
                         Nenhuma locação realizada ainda
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead>
-                            <tr className="bg-zinc-900/50">
-                              <th className="text-left text-zinc-400 font-medium px-4 py-3 text-sm">Equipamento</th>
-                              <th className="text-left text-zinc-400 font-medium px-4 py-3 text-sm">Cliente</th>
-                              <th className="text-left text-zinc-400 font-medium px-4 py-3 text-sm">Data</th>
-                              <th className="text-center text-zinc-400 font-medium px-4 py-3 text-sm">Status</th>
+                            <tr className="bg-surface-inset/50">
+                              <th className="text-left text-foreground-secondary font-medium px-4 py-3 text-sm">Equipamento</th>
+                              <th className="text-left text-foreground-secondary font-medium px-4 py-3 text-sm">Cliente</th>
+                              <th className="text-left text-foreground-secondary font-medium px-4 py-3 text-sm">Data</th>
+                              <th className="text-center text-foreground-secondary font-medium px-4 py-3 text-sm">Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {detalheLocador.historico.map((loc) => (
-                              <tr key={loc.id} className="border-t border-zinc-700/50">
+                              <tr key={loc.id} className="border-t border-border">
                                 <td className="px-4 py-3">
-                                  <span className="text-white">{loc.equipamento_nome}</span>
+                                  <span className="text-foreground">{loc.equipamento_nome}</span>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <span className="text-zinc-300">{loc.cliente_nome}</span>
+                                  <span className="text-foreground-secondary">{loc.cliente_nome}</span>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div className="flex items-center gap-1.5 text-zinc-400 text-sm">
+                                  <div className="flex items-center gap-1.5 text-foreground-secondary text-sm">
                                     <Clock className="w-4 h-4" />
                                     {new Date(loc.data_inicio).toLocaleDateString('pt-BR')}
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   {loc.status === 'ativa' ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cta/20 text-cta rounded text-xs font-medium">
                                       Em andamento
                                     </span>
                                   ) : (
@@ -2132,7 +2267,7 @@ export default function Adm() {
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-16 text-zinc-400">
+                <div className="text-center py-16 text-foreground-secondary">
                   Erro ao carregar detalhes
                 </div>
               )}
@@ -2146,27 +2281,27 @@ export default function Adm() {
       ===================================================== */}
       {modalResetAberto && usuarioParaReset && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 rounded-2xl border border-zinc-700 w-full max-w-md">
-            <div className="p-6 border-b border-zinc-700">
+          <div className="bg-surface-inset rounded-2xl border border-border w-full max-w-md">
+            <div className="p-6 border-b border-border">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center">
-                  <KeyRound className="w-6 h-6 text-amber-500" />
+                <div className="w-12 h-12 bg-cta/20 rounded-full flex items-center justify-center">
+                  <KeyRound className="w-6 h-6 text-cta" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Resetar Senha</h2>
-                  <p className="text-zinc-400 text-sm">{usuarioParaReset.nome}</p>
+                  <h2 className="text-xl font-bold text-foreground">Resetar Senha</h2>
+                  <p className="text-foreground-secondary text-sm">{usuarioParaReset.nome}</p>
                 </div>
               </div>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <p className="text-zinc-400 text-sm mb-1">Email do usuário:</p>
-                <p className="text-white font-medium">{usuarioParaReset.email}</p>
+                <p className="text-foreground-secondary text-sm mb-1">Email do usuário:</p>
+                <p className="text-foreground font-medium">{usuarioParaReset.email}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                <label className="block text-sm font-medium text-foreground-secondary mb-2">
                   Nova Senha
                 </label>
                 <div className="relative">
@@ -2175,39 +2310,39 @@ export default function Adm() {
                     value={novaSenhaInput}
                     onChange={(e) => setNovaSenhaInput(e.target.value)}
                     placeholder="Digite a nova senha (mín. 6 caracteres)"
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none pr-12"
+                    className="w-full px-4 py-3 bg-surface-elevated border border-border rounded-xl text-foreground placeholder:text-foreground-muted focus:border-cta focus:ring-1 focus:ring-cta outline-none pr-12"
                   />
                   <button
                     type="button"
                     onClick={() => setMostrarSenhaInput(!mostrarSenhaInput)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary hover:text-foreground"
                   >
                     {mostrarSenhaInput ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-                <p className="text-zinc-500 text-xs mt-2">
+                <p className="text-foreground-muted text-xs mt-2">
                   O usuário será deslogado e precisará usar esta senha para entrar novamente.
                 </p>
               </div>
 
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-                <p className="text-amber-400 text-sm">
+              <div className="bg-cta/10 border border-cta/30 rounded-xl p-3">
+                <p className="text-cta text-sm">
                   <strong>Atenção:</strong> Ao confirmar, o usuário será deslogado automaticamente.
                 </p>
               </div>
             </div>
 
-            <div className="p-6 border-t border-zinc-700 flex gap-3">
+            <div className="p-6 border-t border-border flex gap-3">
               <button
                 onClick={fecharModalReset}
-                className="flex-1 px-4 py-3 bg-zinc-800 text-white font-semibold rounded-xl hover:bg-zinc-700 transition-colors border border-zinc-700"
+                className="flex-1 px-4 py-3 bg-surface-elevated text-foreground font-semibold rounded-xl hover:bg-glass-hover transition-colors border border-border"
               >
                 Cancelar
               </button>
               <button
                 onClick={executarResetSenha}
                 disabled={!novaSenhaInput || novaSenhaInput.length < 6 || resetandoSenha === usuarioParaReset.id}
-                className="flex-1 px-4 py-3 bg-amber-500 text-zinc-900 font-bold rounded-xl hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-3 bg-cta text-white font-bold rounded-xl hover:bg-cta transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {resetandoSenha === usuarioParaReset.id ? (
                   <>

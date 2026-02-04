@@ -1,24 +1,33 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, ESTADOS_BR } from '../contexts/AppContext'
+import { useAuth, type Profile } from '../contexts/AuthContext'
+import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, ESTADOS_BR, isLinhaAmarela } from '../contexts/AppContext'
 import { PropostaRecebidaCard } from '../components/chat/PropostaRecebidaCard'
+import ReviewCard from '../components/chat/ReviewCard'
 import { supabase } from '../lib/supabase'
 import {
-  Send, Loader2, X, FileText, Check, XCircle, Truck, MessageCircle, Package,
-  ChevronLeft, PartyPopper, ArrowLeft, Search, ExternalLink, Plus, MapPin, DollarSign,
-  RefreshCw, RotateCcw
+  Send, Loader2, X, FileText, Check, Truck, MessageCircle, Package,
+  ChevronLeft, PartyPopper, ArrowLeft, Search, ExternalLink, Plus, MapPin,
+  RefreshCw, HardHat, Paperclip, Clock, Download
 } from 'lucide-react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import { getStatusInfo, isSystemMessage } from '../utils/chat'
+import { gerarTermoLocacao } from '../utils/gerarContrato'
 import { ChatStatusBar } from '../components/chat/ChatStatusBar'
-
-const SYSTEM_SENDER_ID = '00000000-0000-0000-0000-000000000000'
+import TraktoLogo from '../components/TraktoLogo'
+import { ContractGeneratorModal } from '../components/ContractGeneratorModal'
+import { mapContextToContractData } from '../utils/contractDataMapper'
 
 function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null
   if (path.startsWith('http') || path.startsWith('data:')) return path
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
   return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
+}
+
+function getChatStatusInfo(chat: Chat | null): { label: string; gradient: string } {
+  if (!chat) return { label: 'Chat', gradient: 'from-slate-400 to-slate-500' }
+  return getStatusInfo(chat.proposta?.status, chat.equipamento?.status)
 }
 
 // ========== MODAL DE PROPOSTA (LOCADOR) ==========
@@ -30,7 +39,10 @@ function PropostaModal({
   equipamentoNome,
   equipamentoPreco,
   quantidadeDiasSolicitados,
-  enderecoEntrega
+  enderecoEntrega,
+  equipamentoCategoria,
+  precisaOperador,
+  onPreviewChange
 }: {
   isOpen: boolean
   onClose: () => void
@@ -41,29 +53,55 @@ function PropostaModal({
     valorTotal: number
     desconto?: number
     taxaExtra?: number
+    comOperador?: boolean
+    valorOperadorDiaria?: number
   }) => Promise<void>
   loading: boolean
   equipamentoNome?: string
   equipamentoPreco?: number
   quantidadeDiasSolicitados?: number
   enderecoEntrega?: { logradouro?: string; cidade?: string; uf?: string; cep?: string }
+  equipamentoCategoria?: string | null
+  precisaOperador?: boolean
+  onPreviewChange?: (preview: { valorDiaria: number; valorFrete: number; valorTotal: number; dias: number }) => void
 }) {
   const [valorDiaria, setValorDiaria] = useState(equipamentoPreco?.toString() || '')
   const [valorFrete, setValorFrete] = useState('')
   const [desconto, setDesconto] = useState('')
   const [taxaExtra, setTaxaExtra] = useState('')
+  const [comOperador, setComOperador] = useState(false)
+  const [valorOperadorDiaria, setValorOperadorDiaria] = useState('')
+
+  const isLA = equipamentoCategoria ? isLinhaAmarela(equipamentoCategoria) : false
+
   useEffect(() => {
     if (equipamentoPreco) setValorDiaria(equipamentoPreco.toString())
   }, [equipamentoPreco])
+
+  useEffect(() => {
+    if (isOpen) {
+      setComOperador(precisaOperador || false)
+      setValorOperadorDiaria('')
+    }
+  }, [isOpen, precisaOperador])
 
   const valorDiariaNum = parseFloat(valorDiaria) || 0
   const valorFreteNum = parseFloat(valorFrete) || 0
   const descontoNum = parseFloat(desconto) || 0
   const taxaExtraNum = parseFloat(taxaExtra) || 0
+  const valorOperadorNum = comOperador ? (parseFloat(valorOperadorDiaria) || 0) : 0
   const quantidadeDiasNum = quantidadeDiasSolicitados || 0
 
   const subtotalLocacao = valorDiariaNum * quantidadeDiasNum
-  const valorTotal = subtotalLocacao + valorFreteNum - descontoNum + taxaExtraNum
+  const subtotalOperador = valorOperadorNum * quantidadeDiasNum
+  const valorTotal = subtotalLocacao + subtotalOperador + valorFreteNum - descontoNum + taxaExtraNum
+
+  // Live preview para sidebar "Resumo do Acordo"
+  useEffect(() => {
+    if (isOpen && onPreviewChange) {
+      onPreviewChange({ valorDiaria: valorDiariaNum, valorFrete: valorFreteNum, valorTotal, dias: quantidadeDiasNum })
+    }
+  }, [isOpen, valorDiariaNum, valorFreteNum, valorTotal, quantidadeDiasNum, onPreviewChange])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,129 +116,176 @@ function PropostaModal({
       valorTotal,
       desconto: descontoNum > 0 ? descontoNum : undefined,
       taxaExtra: taxaExtraNum > 0 ? taxaExtraNum : undefined,
+      comOperador: comOperador || undefined,
+      valorOperadorDiaria: valorOperadorNum > 0 ? valorOperadorNum : undefined,
     })
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b bg-slate-50">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-amber-600" />
+    <div className="fixed inset-0 glass-backdrop flex items-center justify-center p-4 z-50">
+      <div className="bg-surface-card backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden border border-border">
+        {/* Dark Header */}
+        <div className="bg-surface-elevated p-5 flex items-center justify-between border-b border-border-subtle">
+          <h2 className="text-lg font-bold text-foreground flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-cta rounded-lg flex items-center justify-center">
+              <FileText className="w-4 h-4 text-foreground" />
+            </div>
             Gerar Proposta
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg">
-            <X className="w-5 h-5 text-slate-500" />
+          <button onClick={onClose} className="p-2 hover:bg-glass-hover rounded-xl transition-colors">
+            <X className="w-5 h-5 text-foreground-secondary" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
-            <p className="text-sm text-slate-600">Equipamento:</p>
-            <p className="font-semibold text-slate-900">{equipamentoNome || 'Equipamento'}</p>
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-5rem)]">
+          <div className="bg-surface-inset/50 p-4 rounded-2xl border border-border-subtle">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-1">Equipamento</p>
+            <p className="font-bold text-foreground">{equipamentoNome || 'Equipamento'}</p>
           </div>
 
           {(quantidadeDiasSolicitados || enderecoEntrega?.logradouro) && (
-            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-sm">
-              <p className="font-semibold text-blue-800 mb-1">Solicitacao do Cliente:</p>
-              {quantidadeDiasSolicitados && <p className="text-blue-700">{quantidadeDiasSolicitados} dias solicitados</p>}
+            <div className="bg-blue-500/10 p-4 rounded-2xl border border-blue-500/20">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-2">Solicitacao do Cliente</p>
+              {quantidadeDiasSolicitados && <p className="text-sm text-blue-300 font-medium">{quantidadeDiasSolicitados} dias solicitados</p>}
               {enderecoEntrega?.logradouro && (
-                <p className="text-blue-700">{enderecoEntrega.logradouro}, {enderecoEntrega.cidade}/{enderecoEntrega.uf}</p>
+                <p className="text-sm text-blue-300">{enderecoEntrega.logradouro}, {enderecoEntrega.cidade}/{enderecoEntrega.uf}</p>
               )}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Valor Diaria (R$) *</label>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Valor Diaria (R$) *</label>
             <input
               type="number"
               step="0.01"
               value={valorDiaria}
               onChange={(e) => setValorDiaria(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+              className="w-full px-4 py-3 bg-surface-inset/50 border border-border rounded-xl focus:ring-2 focus:ring-cta focus:border-cta outline-none transition-all text-foreground placeholder:text-foreground-muted"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Valor Frete (R$)</label>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Valor Frete (R$)</label>
             <input
               type="number"
               step="0.01"
               value={valorFrete}
               onChange={(e) => setValorFrete(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+              className="w-full px-4 py-3 bg-surface-inset/50 border border-border rounded-xl focus:ring-2 focus:ring-cta focus:border-cta outline-none transition-all text-foreground placeholder:text-foreground-muted"
               placeholder="0.00 = Frete Gratis"
             />
           </div>
 
-          {/* Desconto e Taxa Extra */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Desconto (R$)</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Desconto (R$)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={desconto}
                 onChange={(e) => setDesconto(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                className="w-full px-4 py-3 bg-surface-inset/50 border border-border rounded-xl focus:ring-2 focus:ring-cta focus:border-cta outline-none transition-all text-foreground placeholder:text-foreground-muted"
                 placeholder="0.00"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Taxa Extra (R$)</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Taxa Extra (R$)</label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 value={taxaExtra}
                 onChange={(e) => setTaxaExtra(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                className="w-full px-4 py-3 bg-surface-inset/50 border border-border rounded-xl focus:ring-2 focus:ring-cta focus:border-cta outline-none transition-all text-foreground placeholder:text-foreground-muted"
                 placeholder="0.00"
               />
             </div>
           </div>
 
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200 space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Locacao ({quantidadeDiasNum}d x R$ {valorDiariaNum.toFixed(2)})</span>
-              <span className="font-medium">R$ {subtotalLocacao.toFixed(2)}</span>
+          {isLA && (
+            <div className={`p-4 rounded-2xl border-2 space-y-3 ${precisaOperador ? 'bg-cta/20 border-cta/40' : 'bg-cta/10 border-cta/20'}`}>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={comOperador}
+                  onChange={(e) => setComOperador(e.target.checked)}
+                  className="w-5 h-5 text-cta rounded focus:ring-cta"
+                />
+                <HardHat className="w-5 h-5 text-cta" />
+                <span className="text-sm font-bold text-cta">Incluir Operador</span>
+                {precisaOperador && (
+                  <span className="text-[10px] bg-cta text-white px-2.5 py-0.5 rounded-full font-bold ml-auto uppercase tracking-wider">Solicitado</span>
+                )}
+              </label>
+              {comOperador && (
+                <div className="ml-8">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Custo do Operador (R$ por dia)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={valorOperadorDiaria}
+                    onChange={(e) => setValorOperadorDiaria(e.target.value)}
+                    className="w-full px-4 py-3 bg-surface-inset/50 border border-cta/20 rounded-xl text-sm text-foreground focus:ring-2 focus:ring-cta outline-none"
+                    placeholder="200.00"
+                  />
+                  {valorOperadorNum > 0 && quantidadeDiasNum > 0 && (
+                    <p className="text-xs text-cta mt-1.5 font-medium">
+                      Subtotal operador: R$ {subtotalOperador.toFixed(2)} ({quantidadeDiasNum}d)
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
+          )}
+
+          <div className="bg-surface-inset/50 p-5 rounded-2xl space-y-2 border border-border-subtle">
+            <div className="flex justify-between text-sm">
+              <span className="text-foreground-secondary">Locacao ({quantidadeDiasNum}d x R$ {valorDiariaNum.toFixed(2)})</span>
+              <span className="font-bold text-foreground-secondary">R$ {subtotalLocacao.toFixed(2)}</span>
+            </div>
+            {subtotalOperador > 0 && (
+              <div className="flex justify-between text-sm text-cta">
+                <span>Operador ({quantidadeDiasNum}d x R$ {valorOperadorNum.toFixed(2)})</span>
+                <span className="font-bold">+ R$ {subtotalOperador.toFixed(2)}</span>
+              </div>
+            )}
             {valorFreteNum > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Frete</span>
-                <span className="font-medium">R$ {valorFreteNum.toFixed(2)}</span>
+                <span className="text-foreground-secondary">Frete</span>
+                <span className="font-bold text-foreground-secondary">R$ {valorFreteNum.toFixed(2)}</span>
               </div>
             )}
             {descontoNum > 0 && (
-              <div className="flex justify-between text-sm text-green-700">
+              <div className="flex justify-between text-sm text-green-400">
                 <span>Desconto</span>
-                <span className="font-medium">- R$ {descontoNum.toFixed(2)}</span>
+                <span className="font-bold">- R$ {descontoNum.toFixed(2)}</span>
               </div>
             )}
             {taxaExtraNum > 0 && (
-              <div className="flex justify-between text-sm text-orange-700">
+              <div className="flex justify-between text-sm text-cta">
                 <span>Taxa Extra</span>
-                <span className="font-medium">+ R$ {taxaExtraNum.toFixed(2)}</span>
+                <span className="font-bold">+ R$ {taxaExtraNum.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between pt-2 border-t border-green-300 mt-2">
-              <span className="font-bold text-slate-900">TOTAL</span>
-              <span className="text-xl font-bold text-green-600">R$ {valorTotal.toFixed(2)}</span>
+            <div className="flex justify-between pt-3 border-t border-border-subtle mt-3">
+              <span className="font-black text-foreground">TOTAL</span>
+              <span className="text-2xl font-black text-green-400 font-tech">R$ {valorTotal.toFixed(2)}</span>
             </div>
           </div>
 
           <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200">
+            <button type="button" onClick={onClose} className="flex-1 py-3.5 bg-glass-hover text-foreground-secondary font-bold rounded-xl hover:bg-glass-hover transition-colors border border-border-subtle">
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading || valorTotal <= 0}
-              className="flex-1 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 bg-cta text-white font-bold rounded-xl hover:bg-cta disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg shadow-cta/20 transition-all"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               Enviar
@@ -212,20 +297,57 @@ function PropostaModal({
   )
 }
 
-// ========== MODAL DE SUCESSO ==========
+// ========== MODAL DE SUCESSO (LOCATÁRIO) ==========
 function SucessoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   if (!isOpen) return null
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm text-center p-6">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <PartyPopper className="w-8 h-8 text-green-600" />
+    <div className="fixed inset-0 glass-backdrop flex items-center justify-center p-4 z-50">
+      <div className="bg-surface-card backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-sm text-center p-8 border border-border">
+        <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-5">
+          <PartyPopper className="w-10 h-10 text-green-400" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">Proposta Aceita!</h2>
-        <p className="text-slate-600 mb-4">O locador irá preparar a entrega do equipamento.</p>
-        <button onClick={onClose} className="w-full py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">
+        <h2 className="text-xl font-black text-foreground mb-2">Proposta Aceita!</h2>
+        <p className="text-foreground-secondary mb-6">O locador irá preparar a entrega do equipamento.</p>
+        <button onClick={onClose} className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 shadow-lg shadow-green-600/20 transition-all">
           Entendido
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ========== MODAL DE NOTIFICAÇÃO (LOCADOR) ==========
+function NotificacaoLocadorModal({ isOpen, onClose, onIrParaFrota }: {
+  isOpen: boolean
+  onClose: () => void
+  onIrParaFrota: () => void
+}) {
+  if (!isOpen) return null
+  return (
+    <div className="fixed inset-0 glass-backdrop flex items-center justify-center p-4 z-50">
+      <div className="bg-surface-card backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-sm text-center p-8 border border-border">
+        <div className="w-20 h-20 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-5">
+          <Truck className="w-10 h-10 text-purple-400" />
+        </div>
+        <h2 className="text-xl font-black text-foreground mb-2">Proposta Aceita!</h2>
+        <p className="text-foreground-secondary mb-6">
+          O cliente aceitou sua proposta. Gerencie o despacho e entrega do equipamento em Minha Frota.
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={onIrParaFrota}
+            className="w-full py-3.5 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-500 shadow-lg shadow-purple-600/20 transition-all flex items-center justify-center gap-2"
+          >
+            <Package className="w-5 h-5" />
+            Ir para Minha Frota
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 text-foreground-muted font-medium rounded-xl hover:text-foreground transition-colors"
+          >
+            Continuar no Chat
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -260,40 +382,40 @@ function ChatList({
   })
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-surface-sidebar">
       {/* Header */}
-      <div className="p-4 border-b border-slate-200">
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={onBack} className="p-1.5 hover:bg-slate-100 rounded-lg">
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
+      <div className="p-5 border-b border-border-subtle">
+        <div className="flex items-center gap-3 mb-4">
+          <button onClick={onBack} className="p-2 hover:bg-glass-hover rounded-xl transition-colors">
+            <ArrowLeft className="w-5 h-5 text-foreground-secondary" />
           </button>
-          <h2 className="text-lg font-bold text-slate-900">Conversas</h2>
+          <h2 className="text-xl font-black text-foreground">Mensagens</h2>
         </div>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-100 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            placeholder="Buscar conversa..."
+            className="w-full pl-10 pr-4 py-2.5 bg-glass-hover border border-border rounded-xl text-sm text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-cta focus:border-cta transition-all"
           />
         </div>
       </div>
 
       {/* Lista */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto py-2">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-foreground-muted" />
           </div>
         ) : filteredChats.length === 0 ? (
-          <div className="p-4 text-center text-slate-500">
-            <MessageCircle className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-            <p className="text-sm">Nenhuma conversa</p>
+          <div className="p-6 text-center">
+            <MessageCircle className="w-12 h-12 mx-auto mb-3 text-foreground-muted" />
+            <p className="text-sm text-foreground-muted font-medium">Nenhuma conversa</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="space-y-0.5 px-2">
             {filteredChats.map((chat) => {
               const isSelected = chat.id === selectedChatId
               const isLocador = chat.locador_id === userId
@@ -304,33 +426,41 @@ function ChatList({
                 <button
                   key={chat.id}
                   onClick={() => onSelectChat(chat.id)}
-                  className={`w-full p-3 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors ${
-                    isSelected ? 'bg-amber-50 border-l-4 border-amber-500' : ''
-                  } ${temNaoLida && !isSelected ? 'bg-amber-50/50' : ''}`}
+                  className={`w-full p-4 flex items-center gap-3.5 rounded-2xl text-left transition-all ${
+                    isSelected
+                      ? 'bg-glass-hover ring-1 ring-border'
+                      : temNaoLida
+                        ? 'bg-glass-hover hover:bg-glass-hover'
+                        : 'hover:bg-glass-hover'
+                  }`}
                 >
                   {/* Avatar */}
-                  <div className="w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 text-amber-700 font-semibold">
-                    {(outraParte || 'C').charAt(0).toUpperCase()}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center text-foreground-secondary font-bold text-lg border border-border">
+                      {(outraParte || 'C').charAt(0).toUpperCase()}
+                    </div>
+                    {temNaoLida && (
+                      <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-cta rounded-full border-2 border-surface-sidebar" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className={`text-sm truncate ${temNaoLida ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
+                      <h3 className={`text-sm truncate ${temNaoLida ? 'font-bold text-foreground' : 'font-semibold text-foreground-secondary'}`}>
                         {outraParte || 'Cliente'}
                       </h3>
                       {chat.ultima_mensagem_data && (
-                        <span className="text-xs text-slate-400 flex-shrink-0">
+                        <span className="text-[10px] text-foreground-muted flex-shrink-0 font-medium">
                           {new Date(chat.ultima_mensagem_data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-amber-600 truncate">{chat.equipamento?.nome}</p>
+                    <p className="text-[11px] text-foreground-muted truncate font-medium">{chat.equipamento?.nome}</p>
                     {chat.ultima_mensagem && (
-                      <p className={`text-xs truncate mt-0.5 ${temNaoLida ? 'text-slate-900 font-medium' : 'text-slate-500'}`}>
+                      <p className={`text-xs truncate mt-0.5 ${temNaoLida ? 'text-foreground font-medium' : 'text-foreground-muted'}`}>
                         {chat.ultima_mensagem}
                       </p>
                     )}
                   </div>
-                  {temNaoLida && <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0" />}
                 </button>
               )
             })}
@@ -347,27 +477,29 @@ function NegociacaoSidebar({
   proposta,
   isLocador,
   isLocatario,
+  podeGerarProposta,
+  podeGerarContrato,
+  isReLocacao,
   onGerarProposta,
+  onGerarContrato,
   onAceitarProposta,
   onRecusarProposta,
-  onDespachar,
-  onConfirmarDevolucao,
   respondendo,
-  despachando,
-  confirmandoDevolucao
+  propostaPreview
 }: {
   chat: Chat | null
   proposta: Proposta | null
   isLocador: boolean
   isLocatario: boolean
+  podeGerarProposta: boolean
+  podeGerarContrato: boolean
+  isReLocacao: boolean
   onGerarProposta: () => void
+  onGerarContrato: () => void
   onAceitarProposta: () => void
   onRecusarProposta: () => void
-  onDespachar?: () => void
-  onConfirmarDevolucao?: () => void
   respondendo: boolean
-  despachando?: boolean
-  confirmandoDevolucao?: boolean
+  propostaPreview?: { valorDiaria: number; valorFrete: number; valorTotal: number; dias: number } | null
 }) {
   if (!chat) return null
 
@@ -376,113 +508,121 @@ function NegociacaoSidebar({
   const eqStatus = equipamento?.status?.toUpperCase()
 
   const getStatusStep = () => {
-    // Devolvido (proposta finalizada)
     if (proposta?.status === 'finalizada') return 4
-    // Em uso (OCUPADO ou EM_TRANSITO legado)
     if (eqStatus === 'OCUPADO' || eqStatus === 'EM_TRANSITO') return 3
-    // Reservado (proposta aceita)
     if (eqStatus === 'RESERVADO' || proposta?.status === 'aceita') return 2
-    // Proposta pendente
     if (proposta?.status === 'pendente') return 1
     return 0
   }
   const step = getStatusStep()
 
   return (
-    <div className="h-full flex flex-col bg-white border-l border-slate-200">
+    <div className="h-full flex flex-col bg-surface-sidebar border-l border-border-subtle">
       {/* Header */}
-      <div className="p-4 border-b border-slate-200">
-        <h3 className="font-bold text-slate-900">Detalhes da Locação</h3>
+      <div className="p-5 border-b border-border-subtle">
+        <h3 className="font-black text-foreground text-lg font-tech">Resumo do Acordo</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Equipamento */}
-        <div className="bg-slate-50 rounded-xl p-3">
-          <div className="flex gap-3">
-            <div className="w-16 h-16 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
+        <div className="bg-surface-inset/50 rounded-2xl p-4 border border-border-subtle">
+          <div className="flex gap-3.5">
+            <div className="w-16 h-16 rounded-xl bg-surface-elevated overflow-hidden flex-shrink-0">
               {fotoUrl ? (
                 <img src={fotoUrl} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-6 h-6 text-slate-400" />
+                  <Package className="w-6 h-6 text-foreground-muted" />
                 </div>
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-slate-900 text-sm truncate">{equipamento?.nome}</p>
-              <p className="text-xs text-slate-500">{equipamento?.categoria}</p>
+              <p className="font-bold text-foreground text-sm truncate">{equipamento?.nome}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mt-0.5">{equipamento?.categoria}</p>
               {equipamento?.preco_diaria && (
-                <p className="text-amber-600 font-bold mt-1">R$ {equipamento.preco_diaria.toFixed(2)}/dia</p>
+                <p className="text-cta font-black mt-1.5 font-tech">R$ {equipamento.preco_diaria.toFixed(2)}/dia</p>
               )}
             </div>
           </div>
         </div>
 
         {/* Stepper de Status */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Status</p>
-          <div className="space-y-1">
+        <div className="space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted font-tech">Status</p>
+          <div className="space-y-1.5">
             {(isLocador ? ['Proposta Enviada', 'Reservado', 'Em Uso', 'Devolvido'] : ['Proposta Enviada', 'Reservado']).map((label, i) => {
-              const stepIndex = i + 1 // step 0 = negociacao (sem proposta)
+              const stepIndex = i + 1
               return (
-                <div key={i} className="flex items-center gap-2">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                    stepIndex < step ? 'bg-green-500 text-white' : stepIndex === step ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-400'
+                <div key={i} className="flex items-center gap-2.5">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    stepIndex < step ? 'bg-green-500 text-white' : stepIndex === step ? 'bg-foreground text-surface' : 'bg-surface-elevated text-foreground-muted'
                   }`}>
                     {stepIndex < step ? '\u2713' : i + 1}
                   </div>
-                  <span className={`text-sm ${stepIndex <= step ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>{label}</span>
+                  <span className={`text-sm ${stepIndex <= step ? 'text-foreground font-semibold' : 'text-foreground-muted'}`}>{label}</span>
                 </div>
               )
             })}
           </div>
         </div>
 
-        {/* Valores da Proposta */}
-        {proposta && (
-          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Valores</p>
-            {proposta.valor_diaria && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Diária</span>
-                <span className="font-medium">R$ {proposta.valor_diaria.toFixed(2)}</span>
+        {/* Valores da Proposta (ou Preview do rascunho) */}
+        {(proposta || propostaPreview) && (() => {
+          const isPreview = !!propostaPreview
+          const diaria = isPreview ? propostaPreview.valorDiaria : proposta?.valor_diaria
+          const dias = isPreview ? propostaPreview.dias : proposta?.quantidade_dias
+          const frete = isPreview ? propostaPreview.valorFrete : proposta?.valor_frete
+          const total = isPreview ? propostaPreview.valorTotal : proposta?.valor_total
+          return (
+            <div className={`rounded-2xl p-4 space-y-2 border ${isPreview ? 'bg-cta/10 border-cta/20' : 'bg-surface-inset/50 border-border-subtle'}`}>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted font-tech">Valores</p>
+                {isPreview && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-cta bg-cta/20 px-2 py-0.5 rounded-full animate-pulse">Rascunho</span>
+                )}
               </div>
-            )}
-            {proposta.quantidade_dias && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Dias</span>
-                <span className="font-medium">{proposta.quantidade_dias}</span>
-              </div>
-            )}
-            {proposta.valor_frete != null && proposta.valor_frete > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Frete</span>
-                <span className="font-medium">R$ {proposta.valor_frete.toFixed(2)}</span>
-              </div>
-            )}
-            {proposta.valor_frete != null && proposta.valor_frete === 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Frete</span>
-                <span className="font-medium text-green-600">Grátis</span>
-              </div>
-            )}
-            {proposta.valor_total && (
-              <div className="flex justify-between pt-2 border-t border-slate-200 mt-2">
-                <span className="font-bold text-slate-900">Total</span>
-                <span className="text-lg font-bold text-green-600">R$ {proposta.valor_total.toFixed(2)}</span>
-              </div>
-            )}
-          </div>
-        )}
+              {diaria != null && diaria > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-foreground-secondary">Diária</span>
+                  <span className="font-bold text-foreground-secondary font-tech">R$ {diaria.toFixed(2)}</span>
+                </div>
+              )}
+              {dias != null && dias > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-foreground-secondary">Dias</span>
+                  <span className="font-bold text-foreground-secondary font-tech">{dias}</span>
+                </div>
+              )}
+              {frete != null && frete > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-foreground-secondary">Frete</span>
+                  <span className="font-bold text-foreground-secondary font-tech">R$ {frete.toFixed(2)}</span>
+                </div>
+              )}
+              {frete != null && frete === 0 && !isPreview && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-foreground-secondary">Frete</span>
+                  <span className="font-bold text-green-400 font-tech">Grátis</span>
+                </div>
+              )}
+              {total != null && total > 0 && (
+                <div className="flex justify-between pt-3 border-t border-border-subtle mt-3">
+                  <span className="font-black text-foreground">Total</span>
+                  <span className={`text-lg font-black font-tech ${isPreview ? 'text-cta animate-pulse' : 'text-green-400'}`}>R$ {total.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Endereço de Entrega */}
         {chat.endereco_entrega_logradouro && (
-          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+          <div className="bg-surface-inset/50 rounded-2xl p-4 space-y-2 border border-border-subtle">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted flex items-center gap-1">
               <MapPin className="w-3 h-3" /> Entrega
             </p>
-            <p className="text-sm text-slate-900">{chat.endereco_entrega_logradouro}</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm text-foreground font-medium">{chat.endereco_entrega_logradouro}</p>
+            <p className="text-xs text-foreground-muted">
               {chat.endereco_entrega_cidade}/{chat.endereco_entrega_uf} - CEP: {chat.endereco_entrega_cep}
             </p>
           </div>
@@ -490,40 +630,48 @@ function NegociacaoSidebar({
       </div>
 
       {/* Ações */}
-      <div className="p-4 border-t border-slate-200 space-y-2">
-        {/* Locador pode gerar proposta (nova ou re-locação após finalizada) */}
-        {isLocador && (!proposta || proposta.status === 'recusada' || proposta.status === 'finalizada') && (
+      <div className="p-4 border-t border-border-subtle space-y-2">
+        {isReLocacao && isLocador && (
+          <div className="bg-glass-hover border border-border-subtle rounded-2xl p-4 text-center">
+            <p className="text-foreground-secondary font-bold text-sm">Ciclo Finalizado</p>
+            <p className="text-foreground-muted text-xs mt-1">Equipamento disponivel - voce pode gerar uma nova locacao</p>
+          </div>
+        )}
+        {podeGerarProposta && (
           <button
             onClick={onGerarProposta}
-            className={`w-full py-3 text-white font-semibold rounded-lg flex items-center justify-center gap-2 ${
-              proposta?.status === 'finalizada'
-                ? 'bg-amber-600 hover:bg-amber-700'
-                : 'bg-amber-500 hover:bg-amber-600'
+            className={`w-full py-3.5 font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all ${
+              isReLocacao
+                ? 'bg-cta-hover hover:bg-cta-hover text-white shadow-cta/20'
+                : proposta?.status === 'pendente'
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
+                  : 'bg-cta hover:bg-cta text-white shadow-cta/20'
             }`}
           >
-            {proposta?.status === 'finalizada' ? (
+            {isReLocacao ? (
               <RefreshCw className="w-5 h-5" />
+            ) : proposta?.status === 'pendente' ? (
+              <FileText className="w-5 h-5" />
             ) : (
               <Plus className="w-5 h-5" />
             )}
-            {proposta?.status === 'finalizada' ? 'Nova Locação' : 'Gerar Proposta'}
+            {isReLocacao ? 'Nova Locação' : proposta?.status === 'pendente' ? 'Editar Proposta' : 'Gerar Proposta'}
           </button>
         )}
 
-        {/* Locatário pode aceitar/recusar */}
         {isLocatario && proposta?.status === 'pendente' && (
           <div className="flex gap-2">
             <button
               onClick={onRecusarProposta}
               disabled={respondendo}
-              className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 disabled:opacity-50"
+              className="flex-1 py-3.5 bg-glass-hover text-foreground-secondary font-bold rounded-xl hover:bg-glass-hover disabled:opacity-50 transition-colors border border-border-subtle"
             >
               Recusar
             </button>
             <button
               onClick={onAceitarProposta}
               disabled={respondendo}
-              className="flex-1 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 py-3.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-green-600/20 transition-all"
             >
               {respondendo ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
               Aceitar
@@ -531,41 +679,36 @@ function NegociacaoSidebar({
           </div>
         )}
 
-        {/* Locador pode despachar quando RESERVADO */}
-        {isLocador && eqStatus === 'RESERVADO' && (
+        {/* Botão Gerar Contrato PDF - APENAS LOCADOR */}
+        {isLocador && podeGerarContrato && (
           <button
-            onClick={onDespachar}
-            disabled={despachando}
-            className="w-full py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            onClick={onGerarContrato}
+            className="w-full py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all"
           >
-            {despachando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-            {despachando ? 'Despachando...' : 'Despachar / Enviar'}
+            <Download className="w-5 h-5" />
+            Baixar Termo de Locação
           </button>
         )}
 
-        {/* Status: Em Uso + Botão Confirmar Devolução (apenas locador) */}
-        {isLocador && (eqStatus === 'OCUPADO' || eqStatus === 'EM_TRANSITO') && (
-          <>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-              <p className="text-green-700 font-semibold text-sm">Em Uso</p>
-              <p className="text-green-600 text-xs mt-1">Equipamento com o cliente</p>
-            </div>
-            <button
-              onClick={onConfirmarDevolucao}
-              disabled={confirmandoDevolucao}
-              className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {confirmandoDevolucao ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
-              {confirmandoDevolucao ? 'Confirmando...' : 'Confirmar Devolução'}
-            </button>
-          </>
+        {/* LOCADOR: Status e ações em Minha Frota */}
+        {isLocador && eqStatus === 'RESERVADO' && (
+          <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl p-4 text-center space-y-2">
+            <p className="text-purple-400 font-bold text-sm">Equipamento Reservado</p>
+            <p className="text-purple-500/60 text-xs">Gerencie o despacho em Minha Frota</p>
+          </div>
         )}
 
-        {/* Status quando aceita e aguardando despacho */}
+        {isLocador && (eqStatus === 'OCUPADO' || eqStatus === 'EM_TRANSITO') && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4 text-center">
+            <p className="text-green-400 font-bold text-sm">Em Uso</p>
+            <p className="text-green-500/60 text-xs mt-1">Gerencie a devolução em Minha Frota</p>
+          </div>
+        )}
+
         {proposta?.status === 'aceita' && eqStatus === 'RESERVADO' && !isLocador && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-            <p className="text-blue-700 font-semibold text-sm">Reservado</p>
-            <p className="text-blue-600 text-xs mt-1">Aguardando despacho do locador</p>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-center">
+            <p className="text-blue-400 font-bold text-sm">Reservado</p>
+            <p className="text-blue-500/60 text-xs mt-1">Aguardando despacho do locador</p>
           </div>
         )}
       </div>
@@ -588,65 +731,67 @@ function EquipamentoModal({
   const fotoUrl = getImageUrl(equipamento.fotos?.[0])
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b bg-slate-50">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Package className="w-5 h-5 text-amber-600" />
+    <div className="fixed inset-0 glass-backdrop flex items-center justify-center p-4 z-50">
+      <div className="bg-surface-card backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden border border-border">
+        <div className="bg-surface-elevated p-5 flex items-center justify-between border-b border-border-subtle">
+          <h2 className="text-lg font-bold text-foreground flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-cta rounded-lg flex items-center justify-center">
+              <Package className="w-4 h-4 text-foreground" />
+            </div>
             Detalhes do Equipamento
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg">
-            <X className="w-5 h-5 text-slate-500" />
+          <button onClick={onClose} className="p-2 hover:bg-glass-hover rounded-xl transition-colors">
+            <X className="w-5 h-5 text-foreground-secondary" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-5rem)]">
           {fotoUrl && (
-            <div className="w-full h-48 rounded-xl overflow-hidden bg-slate-100">
+            <div className="w-full h-48 rounded-2xl overflow-hidden bg-surface-inset">
               <img src={fotoUrl} alt={equipamento.nome} className="w-full h-full object-cover" />
             </div>
           )}
 
           <div>
-            <h3 className="text-xl font-bold text-slate-900">{equipamento.nome}</h3>
+            <h3 className="text-xl font-black text-foreground">{equipamento.nome}</h3>
             {equipamento.categoria && (
-              <p className="text-sm text-amber-600 font-medium mt-1">{equipamento.categoria}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mt-1">{equipamento.categoria}</p>
             )}
           </div>
 
           {equipamento.preco_diaria && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-              <p className="text-sm text-slate-600">Diaria</p>
-              <p className="text-2xl font-bold text-green-600">R$ {equipamento.preco_diaria.toFixed(2)}</p>
+            <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Diaria</p>
+              <p className="text-2xl font-black text-green-400 mt-1 font-tech">R$ {equipamento.preco_diaria.toFixed(2)}</p>
             </div>
           )}
 
           {equipamento.descricao && (
             <div>
-              <p className="text-sm font-semibold text-slate-500 mb-1">Descricao</p>
-              <p className="text-sm text-slate-700">{equipamento.descricao}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted mb-2">Descricao</p>
+              <p className="text-sm text-foreground-secondary leading-relaxed">{equipamento.descricao}</p>
             </div>
           )}
 
           {(equipamento.ano || equipamento.horimetro_atual || equipamento.peso_operacional) && (
-            <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase">Ficha Tecnica</p>
+            <div className="bg-surface-inset/50 rounded-2xl p-4 space-y-2 border border-border-subtle">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">Ficha Tecnica</p>
               {equipamento.ano && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Ano</span>
-                  <span className="font-medium">{equipamento.ano}</span>
+                  <span className="text-foreground-secondary">Ano</span>
+                  <span className="font-bold text-foreground-secondary">{equipamento.ano}</span>
                 </div>
               )}
               {equipamento.horimetro_atual && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Horimetro</span>
-                  <span className="font-medium">{equipamento.horimetro_atual.toLocaleString('pt-BR')}h</span>
+                  <span className="text-foreground-secondary">Horimetro</span>
+                  <span className="font-bold text-foreground-secondary">{equipamento.horimetro_atual.toLocaleString('pt-BR')}h</span>
                 </div>
               )}
               {equipamento.peso_operacional && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Peso Operacional</span>
-                  <span className="font-medium">{equipamento.peso_operacional}t</span>
+                  <span className="text-foreground-secondary">Peso Operacional</span>
+                  <span className="font-bold text-foreground-secondary">{equipamento.peso_operacional}t</span>
                 </div>
               )}
             </div>
@@ -654,7 +799,7 @@ function EquipamentoModal({
 
           <button
             onClick={onClose}
-            className="w-full py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200"
+            className="w-full py-3.5 bg-glass-hover text-foreground-secondary font-bold rounded-xl hover:bg-glass-hover transition-colors border border-border-subtle"
           >
             Fechar
           </button>
@@ -676,9 +821,7 @@ export default function ChatSplitPage() {
     fetchChat,
     enviarProposta,
     responderProposta,
-    marcarMensagensComoLidas,
-    despacharEquipamento,
-    confirmarRetorno
+    marcarMensagensComoLidas
   } = useApp()
 
   const [chats, setChats] = useState<Chat[]>([])
@@ -694,14 +837,19 @@ export default function ChatSplitPage() {
   const [modalSucessoOpen, setModalSucessoOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [showList, setShowList] = useState(!chatId)
-  const [despachando, setDespachando] = useState(false)
-  const [confirmandoDevolucao, setConfirmandoDevolucao] = useState(false)
   const [modalEquipamentoOpen, setModalEquipamentoOpen] = useState(false)
   const [modalPropostaRecebidaOpen, setModalPropostaRecebidaOpen] = useState(false)
+  const [propostaPreview, setPropostaPreview] = useState<{
+    valorDiaria: number; valorFrete: number; valorTotal: number; dias: number
+  } | null>(null)
+  const [contratoModalOpen, setContratoModalOpen] = useState(false)
+  const [locatarioProfile, setLocatarioProfile] = useState<Profile | null>(null)
+  const [notificacaoLocadorOpen, setNotificacaoLocadorOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const inputRef = useRef<HTMLInputElement>(null)
+  const prevStatusRef = useRef<string | undefined>(undefined)
 
   const nomeUsuario = profile?.nome_empresa || profile?.full_name || 'Perfil'
   const isLocador = profile?.tipo_usuario === 'locador'
@@ -715,14 +863,28 @@ export default function ChatSplitPage() {
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
 
-  // Auto-abrir modal de proposta recebida para locatário quando carregar chat com proposta pendente
+  // Locatário: abre modal de proposta recebida
   useEffect(() => {
     if (chat && isUserLocatario && chat.proposta?.status === 'pendente') {
       setModalPropostaRecebidaOpen(true)
     }
   }, [chat?.proposta?.status, isUserLocatario])
 
-  // Carregar chats
+  // Locador: detecta quando equipamento fica RESERVADO e mostra notificação
+  useEffect(() => {
+    if (!chat || !isUserLocador) return
+
+    const currentStatus = chat.equipamento?.status?.toUpperCase()
+    const previousStatus = prevStatusRef.current
+
+    // Se mudou de outro status para RESERVADO, mostra o modal
+    if (previousStatus && previousStatus !== 'RESERVADO' && currentStatus === 'RESERVADO') {
+      setNotificacaoLocadorOpen(true)
+    }
+
+    prevStatusRef.current = currentStatus
+  }, [chat?.equipamento?.status, isUserLocador])
+
   const carregarChats = async () => {
     if (!user) return
     const data = await fetchMeusChats(user.id)
@@ -793,30 +955,59 @@ export default function ChatSplitPage() {
           })
           if (user?.id && novaMsgRealtime.sender_id !== user.id) {
             marcarMensagensComoLidas(chatId, user.id)
+            // Recarrega chat para capturar mudanças de status (proposta, equipamento)
+            await carregarChat(chatId)
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[ChatSplitPage] Mensagens realtime conectado:', chatId)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[ChatSplitPage] Erro na subscription de mensagens')
+        }
+      })
 
     const propostasChannel: RealtimeChannel = supabase
       .channel(`propostas-chat-${chatId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'propostas' },
         async () => { if (mountedRef.current) await carregarChat(chatId) }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('[ChatSplitPage] Erro na subscription de propostas')
+        }
+      })
 
     const chatUpdateChannel: RealtimeChannel = supabase
       .channel(`chat-update-${chatId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chats', filter: `id=eq.${chatId}` },
         async () => { if (mountedRef.current) await carregarChat(chatId) }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('[ChatSplitPage] Erro na subscription de chat updates')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
       supabase.removeChannel(propostasChannel)
       supabase.removeChannel(chatUpdateChannel)
     }
+  }, [chatId])
+
+  // Recarrega mensagens quando a aba volta a ficar visível (fallback para realtime)
+  useEffect(() => {
+    if (!chatId) return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && mountedRef.current) {
+        carregarMensagens(chatId)
+        carregarChat(chatId)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [chatId])
 
   useEffect(() => { scrollToBottom() }, [mensagens])
@@ -829,7 +1020,6 @@ export default function ChatSplitPage() {
     if (result.success) {
       setNovaMensagem('')
       await carregarMensagens(chatId)
-      // Marca como lidas ao enviar (usuario claramente leu tudo se esta respondendo)
       marcarMensagensComoLidas(chatId, user.id)
     }
     setEnviando(false)
@@ -843,11 +1033,19 @@ export default function ChatSplitPage() {
     valorTotal: number
     desconto?: number
     taxaExtra?: number
+    comOperador?: boolean
+    valorOperadorDiaria?: number
   }) => {
     if (!chatId || !user || !chat) return
     setEnviandoProposta(true)
     const equipamentoId = chat.equipamento?.id || chat.proposta?.equipamento_id
     if (!equipamentoId) { setEnviandoProposta(false); return }
+
+    // Calcula data_inicio (amanhã) e data_fim baseado em quantidade_dias
+    const dataInicio = new Date()
+    dataInicio.setDate(dataInicio.getDate() + 1) // Começa amanhã
+    const dataFim = new Date(dataInicio)
+    dataFim.setDate(dataFim.getDate() + (dados.quantidadeDias - 1))
 
     const result = await enviarProposta(chatId, user.id, {
       equipamento_id: equipamentoId,
@@ -857,6 +1055,10 @@ export default function ChatSplitPage() {
       valor_total: dados.valorTotal,
       desconto: dados.desconto,
       taxa_extra: dados.taxaExtra,
+      com_operador: dados.comOperador,
+      valor_operador_diaria: dados.valorOperadorDiaria,
+      data_inicio: dataInicio.toISOString().split('T')[0],
+      data_fim: dataFim.toISOString().split('T')[0],
     })
 
     if (result.success) {
@@ -899,42 +1101,25 @@ export default function ChatSplitPage() {
     }
   }
 
-  const handleDespachar = async () => {
-    if (!chatId || !chat?.proposta?.id || !chat?.equipamento?.id) return
-    setDespachando(true)
-    try {
-      const result = await despacharEquipamento(chat.proposta.id, chat.equipamento.id)
-      if (result.success) {
-        await carregarMensagens(chatId)
-        await carregarChat(chatId)
-      }
-    } catch (err) {
-      console.error('[ChatSplitPage] Erro ao despachar:', err)
-    } finally {
-      setDespachando(false)
-    }
+  const handleGerarContrato = async () => {
+    if (!chat || !chat.proposta || !chat.equipamento || !profile) return
+
+    // Fetch locatario profile
+    const { data: locatarioPerfil } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', chat.locatario_id)
+      .single()
+
+    setLocatarioProfile(locatarioPerfil)
+    setContratoModalOpen(true)
   }
 
-  const handleConfirmarDevolucao = async () => {
-    if (!chatId || !chat?.proposta?.id || !chat?.equipamento?.id) return
-
-    const confirmar = window.confirm('Confirma que o equipamento foi devolvido?')
-    if (!confirmar) return
-
-    setConfirmandoDevolucao(true)
-    try {
-      const result = await confirmarRetorno(chat.proposta.id, chat.equipamento.id)
-      if (result.success) {
-        await carregarMensagens(chatId)
-        await carregarChat(chatId)
-        await carregarChats()
-      }
-    } catch (err) {
-      console.error('[ChatSplitPage] Erro ao confirmar devolução:', err)
-    } finally {
-      setConfirmandoDevolucao(false)
-    }
-  }
+  // Condição para mostrar botão de contrato: proposta aceita (reservado ou em uso)
+  const podeGerarContrato = chat?.proposta?.status === 'aceita' ||
+    chat?.equipamento?.status?.toUpperCase() === 'RESERVADO' ||
+    chat?.equipamento?.status?.toUpperCase() === 'OCUPADO' ||
+    chat?.equipamento?.status?.toUpperCase() === 'EM_TRANSITO'
 
   const formatarHora = (dateStr: string) => new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const formatarData = (dateStr: string) => {
@@ -947,7 +1132,10 @@ export default function ChatSplitPage() {
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const mensagensAgrupadas = mensagens.reduce((acc, msg) => {
+  // Filtra mensagens de sistema — status é exibido na ChatStatusBar
+  const mensagensFiltradas = mensagens.filter(msg => !isSystemMessage(msg.sender_id, msg.texto))
+
+  const mensagensAgrupadas = mensagensFiltradas.reduce((acc, msg) => {
     const data = formatarData(msg.created_at)
     if (!acc[data]) acc[data] = []
     acc[data].push(msg)
@@ -955,288 +1143,375 @@ export default function ChatSplitPage() {
   }, {} as Record<string, Mensagem[]>)
 
   const outraParte = isUserLocador ? chat?.locatario_nome : chat?.locador_nome
+  const statusInfo = getChatStatusInfo(chat)
+
+  // Lógica de re-locação: equipamento devolvido = locador pode gerar nova proposta
+  const eqDisponivel = chat?.equipamento?.status?.toUpperCase() === 'DISPONIVEL'
+  const propostaFinalizada = chat?.proposta?.status === 'finalizada'
+  const isReLocacao = propostaFinalizada || (chat?.proposta?.status === 'aceita' && eqDisponivel)
+  const podeGerarProposta = isUserLocador && (!chat?.proposta || chat?.proposta?.status !== 'aceita' || eqDisponivel)
 
   return (
-    <div className="h-screen bg-slate-100 flex flex-col">
-      {/* ========== HEADER ========== */}
-      <header className="bg-white border-b border-slate-200 flex-shrink-0">
-        <div className="max-w-full mx-auto px-4">
-          <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-3">
-              <Link to="/" className="flex items-center gap-2">
-                <div className="w-9 h-9 bg-amber-500 rounded-lg flex items-center justify-center">
-                  <Truck className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-lg font-bold text-slate-900 hidden sm:inline">Loca<span className="text-amber-500">Obra</span></span>
-              </Link>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-slate-900">{nomeUsuario}</p>
-                <p className="text-xs text-amber-600 font-medium">{isLocador ? 'LOCADOR' : 'LOCATÁRIO'}</p>
-              </div>
-              <div className="w-9 h-9 bg-slate-200 rounded-full flex items-center justify-center">
-                <span className="text-slate-600 font-semibold text-sm">{nomeUsuario.charAt(0).toUpperCase()}</span>
-              </div>
-              <button onClick={signOut} className="text-sm text-slate-500 hover:text-slate-700">Sair</button>
-            </div>
+    <div className="h-screen bg-surface flex flex-col">
+      {/* ========== SLIM HEADER ========== */}
+      <header className="h-14 bg-glass-bg backdrop-blur-md border-b border-border-subtle flex-shrink-0 px-5 flex items-center justify-between">
+        <Link to="/">
+          <TraktoLogo size="sm" />
+        </Link>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-bold text-foreground">{nomeUsuario}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">{isLocador ? 'LOCADOR' : 'LOCATÁRIO'}</p>
           </div>
+          <div className="w-9 h-9 bg-glass-hover rounded-full flex items-center justify-center border border-border">
+            <span className="text-foreground-secondary font-bold text-sm">{nomeUsuario.charAt(0).toUpperCase()}</span>
+          </div>
+          <button onClick={signOut} className="text-sm text-foreground-muted hover:text-foreground font-medium transition-colors">Sair</button>
         </div>
       </header>
 
-      {/* ========== MAIN - 3 COLUNAS ========== */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Coluna 1: Lista de Conversas */}
-        <aside className={`w-80 flex-shrink-0 border-r border-slate-200 ${showList || !chatId ? 'block' : 'hidden lg:block'}`}>
-          <ChatList
-            chats={chats}
-            loading={loadingChats}
-            selectedChatId={chatId || null}
-            onSelectChat={handleSelectChat}
-            userId={user?.id}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            onBack={() => navigate('/')}
-          />
-        </aside>
-
-        {/* Coluna 2: Chat */}
-        <main className={`flex-1 flex flex-col bg-slate-50 ${!showList || chatId ? 'flex' : 'hidden lg:flex'}`}>
-          {!chatId ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center p-8">
-                <MessageCircle className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-600 mb-2">Selecione uma conversa</h3>
-                <p className="text-slate-400 text-sm">Escolha uma conversa da lista</p>
-              </div>
-            </div>
-          ) : loadingChat ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-            </div>
-          ) : !chat ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-4">
-              <Package className="w-16 h-16 text-slate-300 mb-4" />
-              <h2 className="text-lg font-semibold text-slate-600 mb-2">Chat não encontrado</h2>
-              <button onClick={() => navigate('/chats')} className="px-4 py-2 bg-amber-500 text-white rounded-lg">
-                Voltar
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Header do Chat */}
-              <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setShowList(true)}
-                    className="lg:hidden p-2 hover:bg-slate-100 rounded-lg"
-                  >
-                    <ChevronLeft className="w-5 h-5 text-slate-600" />
-                  </button>
-                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-semibold">
-                    {(outraParte || 'C').charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-slate-900">{outraParte || 'Cliente'}</h2>
-                    <p className="text-xs text-green-600 flex items-center gap-1">
-                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                      Online agora
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Botão Gerar Proposta (visível quando sidebar está oculta, ou seja, telas < xl) */}
-                  {isUserLocador && (!chat?.proposta || chat?.proposta?.status === 'recusada' || chat?.proposta?.status === 'finalizada') && (
-                    <button
-                      onClick={() => setModalPropostaOpen(true)}
-                      className={`xl:hidden px-4 py-2 text-white font-semibold rounded-lg text-sm flex items-center gap-1.5 ${
-                        chat?.proposta?.status === 'finalizada'
-                          ? 'bg-amber-600 hover:bg-amber-700'
-                          : 'bg-amber-500 hover:bg-amber-600'
-                      }`}
-                    >
-                      {chat?.proposta?.status === 'finalizada' ? (
-                        <RefreshCw className="w-4 h-4" />
-                      ) : (
-                        <FileText className="w-4 h-4" />
-                      )}
-                      {chat?.proposta?.status === 'finalizada' ? 'Nova Locação' : 'Gerar Proposta'}
-                    </button>
-                  )}
-                  {/* Botões aceitar/recusar para locatário (visível quando sidebar oculta) */}
-                  {isUserLocatario && chat?.proposta?.status === 'pendente' && (
-                    <div className="xl:hidden flex items-center gap-1.5">
-                      <button
-                        onClick={handleRecusarProposta}
-                        disabled={respondendoProposta}
-                        className="px-3 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 text-sm disabled:opacity-50"
-                      >
-                        Recusar
-                      </button>
-                      <button
-                        onClick={handleAceitarProposta}
-                        disabled={respondendoProposta}
-                        className="px-3 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 text-sm disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {respondendoProposta ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        Aceitar
-                      </button>
-                    </div>
-                  )}
-                  {/* Botão despachar para locador (visível quando sidebar oculta) */}
-                  {isUserLocador && chat?.equipamento?.status?.toUpperCase() === 'RESERVADO' && (
-                    <button
-                      onClick={handleDespachar}
-                      disabled={despachando}
-                      className="xl:hidden px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 text-sm disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {despachando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      {despachando ? 'Despachando...' : 'Despachar'}
-                    </button>
-                  )}
-                  {/* Botão confirmar devolução para locador quando OCUPADO (visível quando sidebar oculta) */}
-                  {isUserLocador && (chat?.equipamento?.status?.toUpperCase() === 'OCUPADO' || chat?.equipamento?.status?.toUpperCase() === 'EM_TRANSITO') && (
-                    <button
-                      onClick={handleConfirmarDevolucao}
-                      disabled={confirmandoDevolucao}
-                      className="xl:hidden px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {confirmandoDevolucao ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                      {confirmandoDevolucao ? 'Confirmando...' : 'Confirmar Devolução'}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => isUserLocador ? navigate('/') : setModalEquipamentoOpen(true)}
-                    className="px-4 py-2 border border-amber-500 text-amber-600 font-medium rounded-lg hover:bg-amber-50 text-sm flex items-center gap-1"
-                  >
-                    {isUserLocador ? 'Minha Frota' : 'Ver Equipamento'}
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Barra de Status */}
-              <ChatStatusBar
-                propostaStatus={chat?.proposta?.status}
-                equipamentoStatus={chat?.equipamento?.status}
-                hasProposal={!!chat?.proposta}
-                isLocatario={isUserLocatario}
-              />
-
-              {/* Card de proposta inline para Locatário */}
-              {isUserLocatario && chat?.proposta?.status === 'pendente' && (
-                <button
-                  onClick={() => setModalPropostaRecebidaOpen(true)}
-                  className="mx-4 my-3 bg-amber-50 border border-amber-200 rounded-xl p-4 w-[calc(100%-2rem)] text-left hover:bg-amber-100 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-slate-900">
-                        Proposta recebida: R$ {chat.proposta.valor_total?.toFixed(2)} por {chat.proposta.quantidade_dias} dias
-                        {chat.proposta.valor_frete === 0 && ' + Frete Gratis'}
-                      </p>
-                      <p className="text-sm text-amber-600 font-medium">Toque para ver detalhes e responder</p>
-                    </div>
-                  </div>
-                </button>
-              )}
-
-              {/* Mensagens */}
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                {mensagens.length === 0 ? (
-                  <div className="text-center py-16 text-slate-500 text-sm">Nenhuma mensagem ainda</div>
-                ) : (
-                  Object.entries(mensagensAgrupadas).map(([data, msgs]) => (
-                    <div key={data}>
-                      <div className="flex items-center justify-center my-4">
-                        <span className="px-3 py-1 bg-slate-200 text-slate-600 text-xs rounded-full">{data}</span>
-                      </div>
-                      {msgs.map((msg) => {
-                        const isMe = normalizeId(msg.sender_id) === userId
-                        const isSystem = normalizeId(msg.sender_id) === normalizeId(SYSTEM_SENDER_ID) ||
-                          msg.texto.startsWith('✅') || msg.texto.startsWith('❌')
-
-                        if (isSystem) {
-                          return (
-                            <div key={msg.id} className="flex justify-center my-3">
-                              <p className="text-xs text-slate-500 italic bg-slate-100 px-3 py-1 rounded-full">{msg.texto}</p>
-                            </div>
-                          )
-                        }
-
-                        return (
-                          <div key={msg.id} className={`flex mb-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[70%] px-4 py-2 rounded-2xl ${
-                              isMe ? 'bg-amber-500 text-white rounded-br-md' : 'bg-white text-slate-900 rounded-bl-md shadow-sm'
-                            }`}>
-                              <p className="text-sm whitespace-pre-wrap">{msg.texto}</p>
-                              <p className={`text-xs mt-1 ${isMe ? 'text-amber-200' : 'text-slate-400'}`}>{formatarHora(msg.created_at)}</p>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input */}
-              <div className="bg-white border-t border-slate-200 p-3 flex-shrink-0">
-                <form onSubmit={handleEnviar} className="flex items-center gap-2">
-                  <button type="button" className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
-                    <Plus className="w-5 h-5" />
-                  </button>
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={novaMensagem}
-                    onChange={(e) => setNovaMensagem(e.target.value)}
-                    placeholder="Digite sua mensagem..."
-                    className="flex-1 px-4 py-2 bg-slate-100 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    disabled={enviando}
-                  />
-                  <button
-                    type="submit"
-                    disabled={enviando || !novaMensagem.trim()}
-                    className="p-2 bg-amber-500 text-white rounded-full hover:bg-amber-600 disabled:opacity-50"
-                  >
-                    {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                  </button>
-                </form>
-              </div>
-            </>
-          )}
-        </main>
-
-        {/* Coluna 3: Sidebar de Negociação (Desktop only) */}
-        {chatId && chat && (
-          <aside className="w-80 flex-shrink-0 hidden xl:block">
-            <NegociacaoSidebar
-              chat={chat}
-              proposta={chat?.proposta || null}
-              isLocador={isUserLocador}
-              isLocatario={isUserLocatario}
-              onGerarProposta={() => setModalPropostaOpen(true)}
-              onAceitarProposta={handleAceitarProposta}
-              onRecusarProposta={handleRecusarProposta}
-              onDespachar={handleDespachar}
-              onConfirmarDevolucao={handleConfirmarDevolucao}
-              respondendo={respondendoProposta}
-              despachando={despachando}
-              confirmandoDevolucao={confirmandoDevolucao}
+      {/* ========== MAIN - CARD CONTAINER ========== */}
+      <div className="flex-1 flex overflow-hidden lg:p-4">
+        <div className="flex-1 flex overflow-hidden bg-surface-card lg:rounded-[2rem] lg:shadow-2xl lg:shadow-t-shadow lg:border lg:border-border-subtle">
+          {/* Coluna 1: Lista de Conversas */}
+          <aside className={`${chatId ? 'hidden lg:block lg:w-80' : 'w-full lg:w-80'} flex-shrink-0 border-r border-border-subtle`}>
+            <ChatList
+              chats={chats}
+              loading={loadingChats}
+              selectedChatId={chatId || null}
+              onSelectChat={handleSelectChat}
+              userId={user?.id}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              onBack={() => navigate('/')}
             />
           </aside>
-        )}
+
+          {/* Coluna 2: Chat */}
+          <main className={`${chatId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col`}>
+            {!chatId ? (
+              <div className="flex-1 flex items-center justify-center bg-surface/50">
+                <div className="text-center p-8">
+                  <div className="w-20 h-20 bg-glass-hover rounded-full flex items-center justify-center mx-auto mb-5 border border-border-subtle">
+                    <MessageCircle className="w-10 h-10 text-foreground-muted" />
+                  </div>
+                  <h3 className="text-lg font-black text-foreground-secondary mb-2">Selecione uma conversa</h3>
+                  <p className="text-foreground-muted text-sm">Escolha uma conversa da lista</p>
+                </div>
+              </div>
+            ) : loadingChat ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-foreground-secondary" />
+              </div>
+            ) : !chat ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-4">
+                <div className="w-20 h-20 bg-glass-hover rounded-full flex items-center justify-center mb-5 border border-border-subtle">
+                  <Package className="w-10 h-10 text-foreground-muted" />
+                </div>
+                <h2 className="text-lg font-black text-foreground-secondary mb-2">Chat não encontrado</h2>
+                <button onClick={() => navigate('/chats')} className="px-5 py-2.5 bg-cta text-white rounded-xl font-bold shadow-lg shadow-cta/20">
+                  Voltar
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Chat Header - Premium */}
+                <div className="h-20 bg-surface-card border-b border-border-subtle px-5 flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setShowList(true)}
+                      className="lg:hidden p-2 hover:bg-glass-hover rounded-xl transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5 text-foreground-secondary" />
+                    </button>
+                    {/* Avatar with online dot */}
+                    <div className="relative">
+                      <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center text-foreground-secondary font-bold text-lg border border-border">
+                        {(outraParte || 'C').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-[3px] border-surface-card" />
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-foreground text-lg">{outraParte || 'Cliente'}</h2>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white bg-gradient-to-r font-tech ${statusInfo.gradient}`}>
+                          <Clock className="w-3 h-3" />
+                          {statusInfo.label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Botão Gerar/Editar Proposta (visível quando sidebar oculta) - APENAS LOCADOR */}
+                    {isUserLocador && podeGerarProposta && (
+                      <button
+                        onClick={() => setModalPropostaOpen(true)}
+                        className={`xl:hidden px-3 md:px-4 py-2 md:py-2.5 font-bold rounded-xl text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-lg transition-all ${
+                          isReLocacao
+                            ? 'bg-cta-hover hover:bg-cta-hover text-white shadow-cta/20'
+                            : chat?.proposta?.status === 'pendente'
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
+                              : 'bg-cta hover:bg-cta text-white shadow-cta/20'
+                        }`}
+                      >
+                        {isReLocacao ? (
+                          <RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        )}
+                        {isReLocacao ? 'Nova Locação' : chat?.proposta?.status === 'pendente' ? 'Editar' : 'Proposta'}
+                      </button>
+                    )}
+                    {/* Botões aceitar/recusar para locatário */}
+                    {isUserLocatario && chat?.proposta?.status === 'pendente' && (
+                      <div className="xl:hidden flex items-center gap-1.5">
+                        <button
+                          onClick={handleRecusarProposta}
+                          disabled={respondendoProposta}
+                          className="px-2 md:px-3 py-2 md:py-2.5 bg-glass-hover text-foreground-secondary font-bold rounded-xl hover:bg-glass-hover text-xs md:text-sm disabled:opacity-50 transition-colors border border-border-subtle"
+                        >
+                          Recusar
+                        </button>
+                        <button
+                          onClick={() => handleAceitarProposta()}
+                          disabled={respondendoProposta}
+                          className="px-2 md:px-3 py-2 md:py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 text-xs md:text-sm disabled:opacity-50 flex items-center gap-1 shadow-lg shadow-green-600/20 transition-all"
+                        >
+                          {respondendoProposta ? <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin" /> : <Check className="w-3.5 h-3.5 md:w-4 md:h-4" />}
+                          Aceitar
+                        </button>
+                      </div>
+                    )}
+                    {/* Botão Gerar Contrato PDF - APENAS LOCADOR */}
+                    {isUserLocador && podeGerarContrato && (
+                      <button
+                        onClick={handleGerarContrato}
+                        className="px-2 md:px-3 py-2 md:py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 text-xs md:text-sm flex items-center gap-1 md:gap-1.5 transition-colors shadow-lg shadow-indigo-600/20"
+                        title="Baixar Termo de Locação"
+                      >
+                        <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        <span className="hidden sm:inline">Contrato</span>
+                      </button>
+                    )}
+                    {/* Botão Minha Frota (Locador) ou Ver Equipamento (Locatário) */}
+                    <button
+                      onClick={() => isUserLocador ? navigate('/dashboard?tab=fleet') : setModalEquipamentoOpen(true)}
+                      className="px-2 md:px-3 py-2 md:py-2.5 border border-border text-foreground-secondary font-medium rounded-xl hover:bg-glass-hover text-xs md:text-sm flex items-center gap-1 md:gap-1.5 transition-colors"
+                    >
+                      {isUserLocador ? 'Frota' : 'Equipamento'}
+                      <ExternalLink className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Barra de status do equipamento */}
+                <ChatStatusBar
+                  propostaStatus={chat?.proposta?.status}
+                  equipamentoStatus={chat?.equipamento?.status}
+                  hasProposal={!!chat?.proposta}
+                  isLocatario={isUserLocatario}
+                />
+
+                {/* Resumo do Acordo Compacto - Mobile Only - Proposta Aceita */}
+                {chat?.proposta?.status === 'aceita' && (
+                  <div className="lg:hidden px-4 pt-3">
+                    <div className="bg-indigo-50 dark:bg-surface-elevated rounded-xl p-3 border border-indigo-100 dark:border-border flex justify-between items-center shadow-sm">
+                      <div className="flex gap-3 items-center">
+                        <div className="w-12 h-12 bg-white rounded-lg p-1 flex-shrink-0 border border-gray-100 dark:border-border">
+                          <img
+                            src={getImageUrl(chat.equipamento?.fotos?.[0]) || 'https://via.placeholder.com/48'}
+                            alt={chat.equipamento?.nome}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-slate-900 dark:text-white text-sm font-medium leading-tight">
+                            {chat.equipamento?.nome || 'Equipamento'}
+                          </p>
+                          <p className="text-indigo-600 dark:text-purple-400 text-xs font-bold">
+                            R$ {chat.proposta.valor_diaria?.toFixed(2)}/dia
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[10px] text-slate-500 dark:text-gray-500 uppercase">Total</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                          R$ {chat.proposta.valor_total?.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Timeline Compact */}
+                    <div className="flex items-center gap-2 mt-3 px-2">
+                      <div className="flex items-center gap-1.5 opacity-50">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                          <Check size={10} className="text-white" />
+                        </div>
+                        <span className="text-[10px] text-slate-500 dark:text-gray-400">Proposta</span>
+                      </div>
+                      <div className="h-px w-4 bg-gray-300 dark:bg-gray-700"></div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[10px] font-bold">
+                          2
+                        </div>
+                        <span className="text-[10px] text-slate-900 dark:text-white font-medium">Reservado</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Card de proposta inline para Locatário */}
+                {isUserLocatario && chat?.proposta?.status === 'pendente' && (
+                  <button
+                    onClick={() => setModalPropostaRecebidaOpen(true)}
+                    className="mx-5 my-3 bg-cta/10 border border-cta/20 rounded-2xl p-4 w-[calc(100%-2.5rem)] text-left hover:bg-cta/20 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-foreground text-sm">
+                          Proposta recebida: R$ {chat.proposta.valor_total?.toFixed(2)} por {chat.proposta.quantidade_dias} dias
+                          {chat.proposta.valor_frete === 0 && ' + Frete Gratis'}
+                        </p>
+                        <p className="text-xs text-cta font-bold mt-0.5 group-hover:text-blue-300">Toque para ver detalhes e responder</p>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {/* Mensagens */}
+                <div className="flex-1 overflow-y-auto px-5 py-6 bg-surface/50">
+                  {mensagensFiltradas.length === 0 ? (
+                    <div className="text-center py-16">
+                      <p className="text-sm text-foreground-muted font-medium">Nenhuma mensagem ainda</p>
+                    </div>
+                  ) : (
+                    Object.entries(mensagensAgrupadas).map(([data, msgs]) => (
+                      <div key={data}>
+                        <div className="flex items-center justify-center my-6">
+                          <span className="px-4 py-1.5 bg-glass-hover text-foreground-muted text-[11px] font-bold uppercase tracking-wider rounded-full border border-border-subtle">{data}</span>
+                        </div>
+                        {msgs.map((msg) => {
+                          const isMe = normalizeId(msg.sender_id) === userId
+
+                          return (
+                            <div key={msg.id} className={`flex mb-3 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[70%] px-5 py-3 ${
+                                isMe
+                                  ? 'bg-bubble-me text-bubble-me-text rounded-2xl rounded-tr-sm shadow-md'
+                                  : 'bg-bubble-other text-bubble-other-text rounded-2xl rounded-tl-sm border border-border-subtle shadow-sm'
+                              }`}>
+                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.texto}</p>
+                                <p className={`text-[10px] mt-1.5 ${isMe ? 'text-foreground-secondary text-right' : 'text-foreground-muted'}`}>{formatarHora(msg.created_at)}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))
+                  )}
+                  {/* ReviewCard - aparece para locatário após finalização */}
+                  {isUserLocatario && chat?.proposta?.status === 'finalizada' && chat?.proposta?.id && (
+                    <div className="px-5 pb-6">
+                      <ReviewCard
+                        rentalId={chat.proposta.id}
+                        reviewerId={user!.id}
+                        targetId={chat.locador_id}
+                        locadorNome={chat.locador_nome || 'Locador'}
+                      />
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input Premium */}
+                <div className="bg-surface-card border-t border-border-subtle p-3 md:p-4 flex-shrink-0">
+                  <form onSubmit={handleEnviar} className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center bg-glass-hover border border-border rounded-2xl p-1.5 md:p-2">
+                      <input
+                        type="file"
+                        id="chat-file-upload"
+                        accept="image/*,.pdf,.doc,.docx"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            // TODO: implementar upload de arquivo
+                            console.log('Arquivo selecionado:', file.name)
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor="chat-file-upload"
+                        className="p-1.5 md:p-2 hover:bg-glass-hover rounded-xl text-foreground-muted transition-colors cursor-pointer"
+                      >
+                        <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                      </label>
+                      <div className="w-px h-5 md:h-6 bg-border mx-0.5 md:mx-1" />
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={novaMensagem}
+                        onChange={(e) => setNovaMensagem(e.target.value)}
+                        placeholder="Escreva uma mensagem..."
+                        className="flex-1 px-2 md:px-3 py-2 bg-transparent border-0 focus:outline-none text-sm text-foreground placeholder:text-foreground-muted"
+                        disabled={enviando}
+                      />
+                      <button
+                        type="submit"
+                        disabled={enviando || !novaMensagem.trim()}
+                        className="p-2 md:p-2.5 bg-cta text-white rounded-xl hover:bg-cta disabled:opacity-30 transition-all"
+                      >
+                        {enviando ? <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Send className="w-4 h-4 md:w-5 md:h-5" />}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Owner: Gerar Nova Proposta pill */}
+                  {podeGerarProposta && (
+                    <div className="flex justify-center mt-3">
+                      <button
+                        onClick={() => setModalPropostaOpen(true)}
+                        className="flex items-center gap-2 px-5 py-2 border border-cta/30 bg-cta/10 text-cta rounded-full text-sm font-bold hover:bg-cta/20 transition-colors"
+                      >
+                        {isReLocacao ? <RefreshCw className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                        {isReLocacao ? 'Nova Locação' : chat?.proposta?.status === 'pendente' ? 'Editar Proposta' : 'Gerar Nova Proposta'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </main>
+
+          {/* Coluna 3: Sidebar de Negociação (Desktop only) */}
+          {chatId && chat && (
+            <aside className="w-80 flex-shrink-0 hidden xl:block">
+              <NegociacaoSidebar
+                chat={chat}
+                proposta={chat?.proposta || null}
+                isLocador={isUserLocador}
+                isLocatario={isUserLocatario}
+                podeGerarProposta={podeGerarProposta}
+                podeGerarContrato={podeGerarContrato}
+                isReLocacao={isReLocacao}
+                onGerarProposta={() => setModalPropostaOpen(true)}
+                onGerarContrato={handleGerarContrato}
+                onAceitarProposta={handleAceitarProposta}
+                onRecusarProposta={handleRecusarProposta}
+                respondendo={respondendoProposta}
+                propostaPreview={propostaPreview}
+              />
+            </aside>
+          )}
+        </div>
       </div>
 
       {/* Modais */}
       <PropostaModal
         isOpen={modalPropostaOpen}
-        onClose={() => setModalPropostaOpen(false)}
+        onClose={() => { setModalPropostaOpen(false); setPropostaPreview(null) }}
         onEnviar={handleEnviarProposta}
         loading={enviandoProposta}
         equipamentoNome={chat?.equipamento?.nome}
@@ -1248,9 +1523,21 @@ export default function ChatSplitPage() {
           uf: chat?.endereco_entrega_uf,
           cep: chat?.endereco_entrega_cep
         }}
+        equipamentoCategoria={chat?.equipamento?.categoria}
+        precisaOperador={chat?.precisa_operador}
+        onPreviewChange={setPropostaPreview}
       />
 
       <SucessoModal isOpen={modalSucessoOpen} onClose={() => setModalSucessoOpen(false)} />
+
+      <NotificacaoLocadorModal
+        isOpen={notificacaoLocadorOpen}
+        onClose={() => setNotificacaoLocadorOpen(false)}
+        onIrParaFrota={() => {
+          setNotificacaoLocadorOpen(false)
+          navigate('/dashboard?tab=fleet')
+        }}
+      />
 
       <EquipamentoModal
         isOpen={modalEquipamentoOpen}
@@ -1260,8 +1547,8 @@ export default function ChatSplitPage() {
 
       {/* Modal de Proposta Recebida para Locatário */}
       {modalPropostaRecebidaOpen && chat?.proposta && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-4">
+        <div className="fixed inset-0 glass-backdrop flex items-center justify-center p-4 z-50">
+          <div className="bg-surface-card backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 border border-border">
             <PropostaRecebidaCard
               proposta={chat.proposta}
               onAceitar={(endereco) => handleAceitarProposta(endereco)}
@@ -1276,12 +1563,27 @@ export default function ChatSplitPage() {
             />
             <button
               onClick={() => setModalPropostaRecebidaOpen(false)}
-              className="w-full py-2 text-slate-500 text-sm font-medium hover:text-slate-700 mt-2"
+              className="w-full py-2.5 text-foreground-muted text-sm font-bold hover:text-foreground mt-2 transition-colors"
             >
               Fechar
             </button>
           </div>
         </div>
+      )}
+
+      {/* Contract Generator Modal */}
+      {contratoModalOpen && (
+        <ContractGeneratorModal
+          isOpen={contratoModalOpen}
+          onClose={() => setContratoModalOpen(false)}
+          initialData={mapContextToContractData(
+            chat,
+            chat?.proposta || null,
+            chat?.equipamento,
+            profile,
+            locatarioProfile
+          )}
+        />
       )}
     </div>
   )

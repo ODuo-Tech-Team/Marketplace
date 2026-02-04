@@ -14,7 +14,8 @@ import {
   SolicitacaoCard,
   PropostaEnviadaCard,
   PropostaRecebidaCard,
-  Toast
+  Toast,
+  ReviewCard
 } from '../components/chat'
 import { ChatStatusBar } from '../components/chat/ChatStatusBar'
 
@@ -50,13 +51,14 @@ export default function ChatPage() {
   const statusEquipamento = chat?.equipamento?.status?.toUpperCase()
   const equipamentoDisponivel = !statusEquipamento || statusEquipamento === 'DISPONIVEL'
 
-  // Locador pode gerar proposta SEMPRE se:
-  // 1. É locador
-  // 2. Equipamento está disponível
-  // 3. NÃO tem proposta pendente ou aceita ativa
-  const propostaAtiva = statusProposta === 'pendente' || statusProposta === 'aceita'
-  const podeGerarProposta = isLocador && equipamentoDisponivel && !propostaAtiva
+  // Locador pode gerar/editar proposta:
+  // - Gerar: sem proposta, ou recusada
+  // - Editar: proposta pendente (ainda não respondida)
+  // - Nova Locação: proposta finalizada
+  // - Oculto: proposta aceita (negócio em andamento)
+  const podeGerarProposta = isLocador && statusProposta !== 'aceita'
   const isReLocacao = podeGerarProposta && statusProposta === 'finalizada'
+  const isEditarProposta = podeGerarProposta && statusProposta === 'pendente'
   const podeResponderProposta = isLocatario && statusProposta === 'pendente'
   // Despachar: locador pode enviar quando RESERVADO (proposta aceita, aguardando envio)
   const podeDespachar = isLocador && statusEquipamento === 'RESERVADO'
@@ -280,31 +282,31 @@ export default function ChatPage() {
   // Não precisa de retry adicional aqui para evitar loop infinito
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-600 mb-4" />
-        <p className="text-gray-600 font-medium">Carregando conversa...</p>
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-cta mb-4" />
+        <p className="text-foreground-secondary font-medium">Carregando conversa...</p>
       </div>
     )
   }
 
   if (!chat) {
     return (
-      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-        <HardHat className="w-16 h-16 text-gray-300 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-600 mb-2">Chat não encontrado</h2>
-        <p className="text-gray-400 mb-4 text-center">
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4">
+        <HardHat className="w-16 h-16 text-foreground-muted mb-4" />
+        <h2 className="text-xl font-semibold text-foreground-secondary mb-2">Chat não encontrado</h2>
+        <p className="text-foreground-muted mb-4 text-center">
           Este chat pode ter sido removido ou você não tem acesso.
         </p>
         <div className="flex gap-3">
           <button
             onClick={() => carregarChat()}
-            className="px-6 py-3 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors"
+            className="px-6 py-3 bg-cta text-white font-bold rounded-xl hover:bg-cta transition-colors shadow-lg shadow-cta/20"
           >
             Tentar Novamente
           </button>
           <Link
             to="/chats"
-            className="px-6 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+            className="px-6 py-3 bg-glass-hover text-foreground-secondary font-bold rounded-xl hover:bg-glass-hover transition-colors border border-border-subtle"
           >
             Voltar para Conversas
           </Link>
@@ -320,7 +322,7 @@ export default function ChatPage() {
     !isLocador && chat.proposta && chat.proposta.status === 'pendente' && chat.proposta.valor_total
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-surface flex flex-col">
       <ChatHeader
         equipamentoNome={chat.equipamento?.nome}
         equipamentoCategoria={chat.equipamento?.categoria ?? undefined}
@@ -336,6 +338,7 @@ export default function ChatPage() {
         podeDespachar={podeDespachar}
         podeConfirmarDevolucao={podeConfirmarDevolucao}
         isReLocacao={isReLocacao}
+        isEditarProposta={isEditarProposta}
         onGerarProposta={() => setModalPropostaOpen(true)}
         onAceitarProposta={() => chat.proposta?.id && handleAceitarProposta(chat.proposta.id)}
         onRecusarProposta={() => chat.proposta?.id && handleRecusarProposta(chat.proposta.id)}
@@ -346,12 +349,15 @@ export default function ChatPage() {
         marcandoEntregue={marcandoEntregue}
         despachando={despachando}
         confirmandoDevolucao={confirmandoDevolucao}
+        propostaStatus={chat.proposta?.status}
+        equipamentoStatus={chat.equipamento?.status}
       />
 
       <ChatStatusBar
         propostaStatus={chat.proposta?.status}
         equipamentoStatus={chat.equipamento?.status}
         hasProposal={!!chat.proposta}
+        isLocatario={isLocatario}
       />
 
       <Toast message={sucesso} type="success" onClose={limparSucesso} />
@@ -359,7 +365,7 @@ export default function ChatPage() {
 
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-4">
-          <SolicitacaoCard chat={chat} isLocador={isLocador} />
+          <SolicitacaoCard chat={chat} isLocador={isLocador} equipamentoPreco={chat.equipamento?.preco_diaria} equipamentoNome={chat.equipamento?.nome} />
 
           {showPropostaEnviadaCard && (
             <PropostaEnviadaCard
@@ -384,7 +390,19 @@ export default function ChatPage() {
             />
           )}
 
-          <ChatMessages mensagens={mensagens} userId={userId} ref={messagesEndRef} />
+          <ChatMessages mensagens={mensagens} userId={userId} locadorId={chat?.locador_id} ref={messagesEndRef} />
+
+          {/* ReviewCard - aparece para locatário após finalização */}
+          {isLocatario && chat?.proposta?.status === 'finalizada' && chat?.proposta?.id && (
+            <div className="py-4">
+              <ReviewCard
+                rentalId={chat.proposta.id}
+                reviewerId={user!.id}
+                targetId={chat.locador_id}
+                locadorNome={chat.locador_nome || 'Locador'}
+              />
+            </div>
+          )}
         </div>
       </main>
 
@@ -404,6 +422,7 @@ export default function ChatPage() {
         equipamentoNome={chat.equipamento?.nome}
         equipamentoPreco={chat.equipamento?.preco_diaria}
         quantidadeDias={chat.quantidade_dias}
+        precisaOperador={chat.precisa_operador}
       />
     </div>
   )
