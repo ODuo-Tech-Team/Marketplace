@@ -845,11 +845,14 @@ export default function ChatSplitPage() {
   const [contratoModalOpen, setContratoModalOpen] = useState(false)
   const [locatarioProfile, setLocatarioProfile] = useState<Profile | null>(null)
   const [notificacaoLocadorOpen, setNotificacaoLocadorOpen] = useState(false)
+  const [erroEnvio, setErroEnvio] = useState<string | null>(null)
+  const [chatNotFound, setChatNotFound] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
   const inputRef = useRef<HTMLInputElement>(null)
   const prevStatusRef = useRef<string | undefined>(undefined)
+  const channelsRef = useRef<RealtimeChannel[]>([])
 
   const nomeUsuario = profile?.nome_empresa || profile?.full_name || 'Perfil'
   const isLocador = profile?.tipo_usuario === 'locador'
@@ -898,9 +901,20 @@ export default function ChatSplitPage() {
     if (!mountedRef.current) return
     try {
       const chatData = await fetchChat(id)
-      if (mountedRef.current) setChat(chatData)
+      if (mountedRef.current) {
+        if (!chatData) {
+          // Chat não encontrado - marca como não encontrado
+          setChatNotFound(true)
+          return
+        }
+        setChatNotFound(false)
+        setChat(chatData)
+      }
     } catch (err) {
       console.error('[ChatSplitPage] Erro ao carregar chat:', err)
+      if (mountedRef.current) {
+        setChatNotFound(true)
+      }
     }
   }
 
@@ -990,24 +1004,53 @@ export default function ChatSplitPage() {
         }
       })
 
+    // Armazena referência aos canais para reconexão
+    channelsRef.current = [channel, propostasChannel, chatUpdateChannel]
+
     return () => {
+      channelsRef.current = []
       supabase.removeChannel(channel)
       supabase.removeChannel(propostasChannel)
       supabase.removeChannel(chatUpdateChannel)
     }
   }, [chatId])
 
-  // Recarrega mensagens quando a aba volta a ficar visível (fallback para realtime)
+  // Recarrega mensagens e reconecta canais quando a aba volta a ficar visível
   useEffect(() => {
     if (!chatId) return
-    const handleVisibilityChange = () => {
+
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && mountedRef.current) {
+        // Recarrega dados
+        await carregarMensagens(chatId)
+        await carregarChat(chatId)
+
+        // Verifica estado dos canais e reconecta se necessário
+        channelsRef.current.forEach(channel => {
+          const state = channel.state
+          if (state === 'closed' || state === 'errored') {
+            console.log('[ChatSplitPage] Reconectando canal:', channel.topic)
+            channel.subscribe()
+          }
+        })
+      }
+    }
+
+    // Também reconecta quando a janela ganha foco (fallback adicional)
+    const handleFocus = () => {
+      if (mountedRef.current) {
         carregarMensagens(chatId)
         carregarChat(chatId)
       }
     }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [chatId])
 
   useEffect(() => { scrollToBottom() }, [mensagens])
@@ -1016,14 +1059,25 @@ export default function ChatSplitPage() {
     e.preventDefault()
     if (!novaMensagem.trim() || !chatId || !user) return
     setEnviando(true)
-    const result = await enviarMensagem(chatId, user.id, novaMensagem.trim())
+    setErroEnvio(null)
+    const mensagemParaEnviar = novaMensagem.trim()
+    const result = await enviarMensagem(chatId, user.id, mensagemParaEnviar)
     if (result.success) {
       setNovaMensagem('')
       await carregarMensagens(chatId)
       marcarMensagensComoLidas(chatId, user.id)
+    } else {
+      // Mostra erro de envio
+      setErroEnvio(result.error || 'Falha ao enviar mensagem. Toque para tentar novamente.')
     }
     setEnviando(false)
     setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  // Função para tentar reenviar mensagem após erro
+  const handleRetryEnvio = () => {
+    setErroEnvio(null)
+    // A mensagem ainda está no input, usuário pode enviar novamente
   }
 
   const handleEnviarProposta = async (dados: {
@@ -1203,14 +1257,21 @@ export default function ChatSplitPage() {
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-foreground-secondary" />
               </div>
-            ) : !chat ? (
+            ) : !chat || chatNotFound ? (
               <div className="flex-1 flex flex-col items-center justify-center p-4">
                 <div className="w-20 h-20 bg-glass-hover rounded-full flex items-center justify-center mb-5 border border-border-subtle">
                   <Package className="w-10 h-10 text-foreground-muted" />
                 </div>
-                <h2 className="text-lg font-black text-foreground-secondary mb-2">Chat não encontrado</h2>
+                <h2 className="text-lg font-black text-foreground-secondary mb-2">
+                  {chatNotFound ? 'Conversa não disponível' : 'Chat não encontrado'}
+                </h2>
+                <p className="text-sm text-foreground-muted mb-4 text-center max-w-xs">
+                  {chatNotFound
+                    ? 'Esta conversa pode ter sido encerrada ou não está mais disponível.'
+                    : 'Não foi possível carregar esta conversa.'}
+                </p>
                 <button onClick={() => navigate('/chats')} className="px-5 py-2.5 bg-cta text-white rounded-xl font-bold shadow-lg shadow-cta/20">
-                  Voltar
+                  Ver minhas conversas
                 </button>
               </div>
             ) : (
@@ -1219,8 +1280,8 @@ export default function ChatSplitPage() {
                 <div className="h-20 bg-surface-card border-b border-border-subtle px-5 flex items-center justify-between flex-shrink-0">
                   <div className="flex items-center gap-4">
                     <button
-                      onClick={() => setShowList(true)}
-                      className="lg:hidden p-2 hover:bg-glass-hover rounded-xl transition-colors"
+                      onClick={() => navigate('/chats')}
+                      className="p-2 hover:bg-glass-hover rounded-xl transition-colors"
                     >
                       <ChevronLeft className="w-5 h-5 text-foreground-secondary" />
                     </button>
@@ -1467,6 +1528,18 @@ export default function ChatSplitPage() {
                       </button>
                     </div>
                   </form>
+
+                  {/* Erro de envio - feedback visual */}
+                  {erroEnvio && (
+                    <button
+                      onClick={handleRetryEnvio}
+                      className="w-full mt-2 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center justify-center gap-2 text-red-500 text-sm font-medium hover:bg-red-500/20 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>{erroEnvio}</span>
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  )}
 
                   {/* Owner: Gerar Nova Proposta pill */}
                   {podeGerarProposta && (

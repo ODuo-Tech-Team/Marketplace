@@ -308,7 +308,14 @@ export function FinancialWallet({ locacoes, onMarcarPago }: FinancialWalletProps
               <p className="text-slate-500 font-medium text-sm">Nenhuma locação encontrada</p>
             </div>
           ) : (
-            filteredLocacoes.map((loc) => {
+            [...filteredLocacoes]
+              .sort((a, b) => {
+                // Prioridade 1: Pendentes (não pagos) primeiro
+                if (a.pago !== b.pago) return a.pago ? 1 : -1
+                // Prioridade 2: Data mais recente primeiro (dentro do mesmo status)
+                return new Date(b.dataFim).getTime() - new Date(a.dataFim).getTime()
+              })
+              .map((loc) => {
               const isExpanded = expandedId === loc.id
 
               return (

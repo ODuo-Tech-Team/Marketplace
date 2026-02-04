@@ -71,7 +71,7 @@ export default function BottomNav({ mensagensNaoLidas = 0, nomeUsuario = 'Usuár
 
           {/* Menu Items */}
           <div className="py-2">
-            {/* Minhas Locações (histórico do cliente) */}
+            {/* Meus Aluguéis (histórico do cliente) */}
             <button
               onClick={() => handleMenuItemClick('/meus-pedidos')}
               className="w-full flex items-center gap-4 px-5 py-4 text-white hover:bg-white/5 transition-colors"
@@ -80,12 +80,12 @@ export default function BottomNav({ mensagensNaoLidas = 0, nomeUsuario = 'Usuár
                 <Package size={20} className="text-indigo-400" />
               </div>
               <div className="text-left">
-                <p className="font-semibold">Minhas Locações</p>
+                <p className="font-semibold">Meus Aluguéis</p>
                 <p className="text-xs text-gray-400">Histórico de aluguéis</p>
               </div>
             </button>
 
-            {/* Acompanhar Pedidos */}
+            {/* Meus Pedidos */}
             <button
               onClick={() => handleMenuItemClick('/chats')}
               className="w-full flex items-center gap-4 px-5 py-4 text-white hover:bg-white/5 transition-colors"
@@ -94,7 +94,7 @@ export default function BottomNav({ mensagensNaoLidas = 0, nomeUsuario = 'Usuár
                 <Clock size={20} className="text-amber-400" />
               </div>
               <div className="text-left">
-                <p className="font-semibold">Acompanhar Pedidos</p>
+                <p className="font-semibold">Meus Pedidos</p>
                 <p className="text-xs text-gray-400">Negociações em andamento</p>
               </div>
             </button>

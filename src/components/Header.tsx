@@ -202,27 +202,24 @@ export default function Header({
           {isUserMenuOpen && (
             <div className="absolute top-12 right-0 w-[280px] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 py-3 z-50 animate-in fade-in zoom-in-95">
 
-              {/* Minhas Locações - Destaque */}
+              {/* Meus Aluguéis - Histórico de locações do cliente */}
               <Link
-                to="/equipments"
+                to="/meus-pedidos"
                 className="flex items-center gap-3 mx-3 mb-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white transition-colors"
                 onClick={() => setIsUserMenuOpen(false)}
               >
                 <Package size={20} />
-                <span className="font-bold">Minhas Locações</span>
+                <span className="font-bold">Meus Aluguéis</span>
               </Link>
 
-              {/* Acompanhar Pedidos */}
+              {/* Meus Pedidos - Negociações em andamento */}
               <Link
-                to="/orders"
+                to="/chats"
                 className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors relative"
                 onClick={() => setIsUserMenuOpen(false)}
               >
                 <Clock size={20} />
-                <div className="flex flex-col">
-                  <span className="font-medium">Acompanhar</span>
-                  <span className="font-medium">Pedidos</span>
-                </div>
+                <span className="font-medium">Meus Pedidos</span>
                 {mensagensNaoLidas > 0 && (
                   <span className="ml-auto bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
                     {mensagensNaoLidas}
@@ -230,23 +227,25 @@ export default function Header({
                 )}
               </Link>
 
-              {/* Documentos */}
-              <button
-                className="w-full flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+              {/* Documentos - Contratos e comprovantes */}
+              <Link
+                to="/meus-pedidos"
+                className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                 onClick={() => setIsUserMenuOpen(false)}
               >
                 <FileText size={20} />
                 <span className="font-medium">Documentos</span>
-              </button>
+              </Link>
 
               {/* Favoritos */}
-              <button
-                className="w-full flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+              <Link
+                to="/meus-pedidos"
+                className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                 onClick={() => setIsUserMenuOpen(false)}
               >
                 <Heart size={20} />
                 <span className="font-medium">Favoritos</span>
-              </button>
+              </Link>
 
               {/* Sair */}
               <div className="border-t border-gray-200 dark:border-white/10 mt-3 pt-3 px-3">

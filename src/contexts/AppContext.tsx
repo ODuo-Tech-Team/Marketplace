@@ -1911,7 +1911,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Função para converter imagens para base64 (funciona sempre!)
+  // Função para fazer upload de imagens para o Supabase Storage
   const uploadImagens = async (
     files: File[],
     locadorId: string
@@ -1920,20 +1920,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const urls: string[] = []
 
       for (const file of files) {
-        // Converte para base64
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => resolve(reader.result as string)
-          reader.onerror = reject
-          reader.readAsDataURL(file)
-        })
+        // Gera nome único para o arquivo
+        const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+        const fileName = `${locadorId}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`
 
-        urls.push(base64)
+        // Faz upload para o Supabase Storage
+        const { data, error: uploadError } = await supabase.storage
+          .from('equipamentos')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          })
+
+        if (uploadError) {
+          console.error('Erro no upload:', uploadError)
+          // Se falhar, tenta com nome alternativo (pode ser conflito)
+          const altFileName = `${locadorId}/${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`
+          const { data: altData, error: altError } = await supabase.storage
+            .from('equipamentos')
+            .upload(altFileName, file, {
+              cacheControl: '3600',
+              upsert: false
+            })
+
+          if (altError) {
+            console.error('Erro no upload alternativo:', altError)
+            continue // Pula este arquivo
+          }
+
+          // Sucesso com nome alternativo - salva o path relativo
+          urls.push(altData.path)
+        } else {
+          // Sucesso - salva o path relativo (será convertido para URL pública no FotosCarrossel)
+          urls.push(data.path)
+        }
+      }
+
+      if (urls.length === 0 && files.length > 0) {
+        return { urls: [], error: 'Não foi possível fazer upload das imagens. Verifique sua conexão.' }
       }
 
       return { urls }
     } catch (err) {
-      return { urls: [], error: 'Erro inesperado ao converter imagens' }
+      console.error('Erro inesperado no upload:', err)
+      return { urls: [], error: 'Erro inesperado ao fazer upload das imagens' }
     }
   }
 
@@ -2230,8 +2260,66 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     profilesChannelRef.current = profilesChannel
 
+    // Função para reconectar canais Realtime se necessário
+    const reconnectChannels = async () => {
+      // Verifica e reconecta canal de equipamentos
+      if (channelRef.current) {
+        const state = channelRef.current.state
+        if (state === 'closed' || state === 'errored') {
+          // Remove canal antigo e cria novo
+          supabase.removeChannel(channelRef.current)
+          const newChannel = supabase
+            .channel('equipamentos-changes-reconnect')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'equipamentos'
+              },
+              (payload) => {
+                handleRealtimeEvent(payload as unknown as {
+                  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+                  new: Equipamento | null
+                  old: { id: string } | null
+                })
+              }
+            )
+            .subscribe()
+          channelRef.current = newChannel
+        }
+      }
+
+      // Verifica e reconecta canal de profiles
+      if (profilesChannelRef.current) {
+        const state = profilesChannelRef.current.state
+        if (state === 'closed' || state === 'errored') {
+          supabase.removeChannel(profilesChannelRef.current)
+          const newProfilesChannel = supabase
+            .channel('profiles-changes-reconnect')
+            .on(
+              'postgres_changes',
+              {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'profiles'
+              },
+              (payload) => {
+                const newRecord = payload.new as { id?: string; destacado?: boolean; verificado?: boolean }
+                if (newRecord && (newRecord.destacado !== undefined || newRecord.verificado !== undefined)) {
+                  fetchEquipamentos()
+                }
+              }
+            )
+            .subscribe()
+          profilesChannelRef.current = newProfilesChannel
+        }
+      }
+    }
+
     // Refetch quando a janela ganha foco (fallback para sincronia entre abas)
     const handleFocus = () => {
+      reconnectChannels()
       fetchEquipamentos()
     }
     window.addEventListener('focus', handleFocus)
@@ -2239,6 +2327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Refetch quando a aba fica visível novamente
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        reconnectChannels()
         fetchEquipamentos()
       }
     }

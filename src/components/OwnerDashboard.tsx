@@ -264,21 +264,33 @@ function NovoEquipamentoDarkModal({
     setSelectedVertical('construcao'); setSpecs({})
   }
 
-  const handleFotosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFotosChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    const novosFiles = [...fotosFiles, ...files].slice(0, 5)
+
+    // Filtra arquivos já existentes (evita duplicação)
+    const filesExistentes = new Set(fotosFiles.map(f => `${f.name}-${f.size}`))
+    const novosArquivos = files.filter(f => !filesExistentes.has(`${f.name}-${f.size}`))
+    if (novosArquivos.length === 0) return
+
+    const novosFiles = [...fotosFiles, ...novosArquivos].slice(0, 5)
     setFotosFiles(novosFiles)
-    const novosPreviews: string[] = []
-    novosFiles.forEach(file => {
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        novosPreviews.push(ev.target?.result as string)
-        if (novosPreviews.length === novosFiles.length) setFotosPreview(novosPreviews)
-      }
-      reader.readAsDataURL(file)
-    })
+
+    // Usa Promise.all para ler todos os arquivos de uma vez (evita race conditions)
+    const lerArquivo = (file: File): Promise<string> => {
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (ev) => resolve(ev.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+    }
+
+    const novosPreviews = await Promise.all(novosFiles.map(lerArquivo))
+    setFotosPreview(novosPreviews)
     setFotosError(null)
+
+    // Limpa o input para permitir selecionar o mesmo arquivo novamente
+    e.target.value = ''
   }
 
   const removerFoto = (index: number) => {
@@ -661,11 +673,14 @@ function CalendarioUnificado({ equipamentos, propostas, onEquipamentoClick }: Ca
   }
 
   // Get reservations for a specific date
+  // Mostra apenas alocações ativas (aceitas) ou pendentes - exclui finalizadas/devolvidas
   const getReservationsForDate = (date: Date) => {
     const dateStr = date.toISOString().split('T')[0]
     return propostas
       .filter(p => {
-        if (p.status !== 'aceita' && p.status !== 'pendente' && p.status !== 'finalizada') return false
+        // Exibe apenas propostas aceitas (em uso) ou pendentes (aguardando confirmação)
+        // Exclui 'finalizada', 'recusada' e outros status de histórico
+        if (p.status !== 'aceita' && p.status !== 'pendente') return false
         if (!p.data_inicio) return false
         const inicio = p.data_inicio.split('T')[0]
         const fim = p.data_fim?.split('T')[0] || inicio
@@ -1533,9 +1548,9 @@ export default function OwnerDashboard() {
 
   // ---------- NAV ITEMS ----------
   const navItems: Array<{ key: TabKey; icon: typeof LayoutDashboard; label: string; badge?: number }> = [
-    { key: 'overview', icon: LayoutDashboard, label: 'Visão' },
-    { key: 'chat', icon: MessageSquare, label: 'Negocia', badge: mensagensNaoLidas },
-    { key: 'fleet', icon: Package, label: 'Frota' },
+    { key: 'overview', icon: LayoutDashboard, label: 'Visão Geral' },
+    { key: 'chat', icon: MessageSquare, label: 'Negociações', badge: mensagensNaoLidas },
+    { key: 'fleet', icon: Package, label: 'Minha Frota' },
     { key: 'wallet', icon: Wallet, label: 'Carteira' },
     { key: 'contracts', icon: FileText, label: 'Contratos' },
     { key: 'calendar', icon: Calendar, label: 'Calendário' },
@@ -1581,7 +1596,25 @@ export default function OwnerDashboard() {
           </nav>
         </div>
 
-        <div className="p-4 lg:p-6 border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+        <div className="p-4 lg:p-6 border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 space-y-3">
+          {/* Toggle de Tema - Desktop */}
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all text-left group"
+            title={currentTheme === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}
+          >
+            <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-neutral-800 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex-shrink-0 border border-gray-200 dark:border-neutral-700">
+              {currentTheme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </div>
+            <div className="hidden lg:block flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                {currentTheme === 'light' ? 'Modo Escuro' : 'Modo Claro'}
+              </p>
+              <p className="text-xs text-slate-400">Alternar tema</p>
+            </div>
+          </button>
+
+          {/* Perfil e Sair */}
           <button onClick={handleSair} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-neutral-800 transition-all text-left">
             <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${theme.gradient} flex items-center justify-center text-white font-bold text-sm shadow-lg ${theme.glow} flex-shrink-0`}>
               {nomeEmpresa.charAt(0).toUpperCase()}
@@ -1673,14 +1706,6 @@ export default function OwnerDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto">
-            <div className="hidden lg:flex items-center bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-2xl px-4 py-3 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all w-64">
-              <Search size={20} className="text-slate-400 mr-3 flex-shrink-0" />
-              <input type="text" placeholder="Buscar..." className="bg-transparent outline-none text-sm font-bold text-slate-900 dark:text-white w-full placeholder:text-slate-400 placeholder:font-medium" />
-            </div>
-            <button onClick={() => handleTabChange('chat')} className="hidden md:flex p-3 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-2xl text-slate-500 hover:text-slate-900 dark:hover:text-white relative shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 transition-all flex-shrink-0">
-              <Bell size={20} />
-              {mensagensNaoLidas > 0 && <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-neutral-800" />}
-            </button>
             {activeTab === 'fleet' && (
               <button
                 onClick={() => openNovoModal()}

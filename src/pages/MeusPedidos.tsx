@@ -272,8 +272,8 @@ export default function MeusPedidos() {
   const initials = profile?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'CL'
 
   const menuItems = [
-    { id: 'active' as TabId, label: 'Minhas Locações', icon: Package, count: activeRentals.length },
-    { id: 'tracking' as TabId, label: 'Acompanhar Pedidos', icon: Clock, count: trackingOrders.length },
+    { id: 'active' as TabId, label: 'Meus Aluguéis', icon: Package, count: activeRentals.length },
+    { id: 'tracking' as TabId, label: 'Meus Pedidos', icon: Clock, count: trackingOrders.length },
     { id: 'documents' as TabId, label: 'Documentos', icon: FileText, count: documents.length },
     { id: 'favorites' as TabId, label: 'Favoritos', icon: Heart },
   ]

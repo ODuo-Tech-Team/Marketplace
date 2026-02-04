@@ -261,7 +261,7 @@ function RenterView() {
             </div>
 
             {/* Desktop: Botão Explorar Ofertas */}
-            <button className="hidden lg:block bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98]">
+            <button className="hidden lg:block mx-auto bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98]">
               Explorar Ofertas
             </button>
           </div>

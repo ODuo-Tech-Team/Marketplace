@@ -3,11 +3,6 @@ import { supabase } from '../lib/supabase'
 import { Loader2, Shield } from 'lucide-react'
 import TraktoLogo from '../components/TraktoLogo'
 
-const ADMIN_EMAILS = [
-  'mauricio.reis@oduo.com.br',
-  'maumaureis0404@gmail.com'
-]
-
 export default function AdminLogin() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,13 +13,6 @@ export default function AdminLogin() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-
-    // Verifica se o email é de admin antes mesmo de tentar logar
-    if (!ADMIN_EMAILS.includes(email.toLowerCase().trim())) {
-      setError('Acesso negado. Este email não possui permissão de administrador.')
-      setLoading(false)
-      return
-    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email,

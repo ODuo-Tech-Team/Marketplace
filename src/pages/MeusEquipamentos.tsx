@@ -711,10 +711,10 @@ export default function MeusEquipamentos({ embedded = false, abrirNovo = false, 
   // Tabs config
   const tabs = [
     { key: 'todos' as TabType, label: 'Todos', count: meusEquipamentos.length, icon: Package },
-    { key: 'negociacao' as TabType, label: 'Negociacao', count: chatsNegociacao.length, icon: MessageCircle },
+    { key: 'negociacao' as TabType, label: 'Negociação', count: chatsNegociacao.length, icon: MessageCircle },
     { key: 'a_enviar' as TabType, label: 'A Enviar', count: equipamentosAEnviar.length, icon: Send },
-    { key: 'em_locacao' as TabType, label: 'Em Locacao', count: equipamentosEmLocacao.length, icon: TruckIcon },
-    { key: 'devolucoes' as TabType, label: 'Devolucoes', count: equipamentosDevolucao.length, icon: RotateCcw },
+    { key: 'em_locacao' as TabType, label: 'Em Locação', count: equipamentosEmLocacao.length, icon: TruckIcon },
+    { key: 'devolucoes' as TabType, label: 'Devoluções', count: equipamentosDevolucao.length, icon: RotateCcw },
   ]
 
   return (

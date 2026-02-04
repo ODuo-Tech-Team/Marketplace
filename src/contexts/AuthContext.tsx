@@ -74,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let initialized = false
+    let isRevalidating = false
 
     const initAuth = async () => {
       try {
@@ -93,7 +94,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Revalida sessão quando a aba volta ao foco (evita loading infinito)
+    const revalidateSession = async () => {
+      if (isRevalidating || !initialized) return
+      isRevalidating = true
+
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+
+        if (error || !session) {
+          // Sessão expirou ou erro - limpa estado
+          setUser(null)
+          setProfile(null)
+        } else if (session.user) {
+          // Sessão válida - atualiza se necessário
+          setUser(session.user)
+          // Re-fetch profile para garantir dados atualizados
+          await fetchProfile(session.user.id)
+        }
+      } catch {
+        // Erro na revalidação - mantém estado atual
+      } finally {
+        isRevalidating = false
+        // Garante que loading é false após revalidação
+        setLoading(false)
+      }
+    }
+
+    // Handler para quando a aba fica visível novamente
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        revalidateSession()
+      }
+    }
+
+    // Handler para quando a janela ganha foco
+    const handleFocus = () => {
+      revalidateSession()
+    }
+
     initAuth()
+
+    // Registra listeners de visibilidade e foco
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event: string, session: Session | null) => {
@@ -113,7 +157,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   const signOut = async () => {

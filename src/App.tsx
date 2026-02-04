@@ -19,12 +19,6 @@ import BottomNav from './components/BottomNav'
 import TraktoLogo from './components/TraktoLogo'
 import { NotificationListener } from './components/NotificationListener'
 
-// Emails autorizados para acesso administrativo
-const ADMIN_EMAILS = [
-  'mauricio.reis@oduo.com.br',
-  'maumaureis0404@gmail.com' // mantém o antigo como backup
-]
-
 function SplashScreen({ onForceEntry }: { onForceEntry: () => void }) {
   const [showFailsafe, setShowFailsafe] = useState(false)
 
@@ -57,9 +51,9 @@ function SplashScreen({ onForceEntry }: { onForceEntry: () => void }) {
   )
 }
 
-// Guard para rota administrativa - verifica se é o email autorizado
+// Guard para rota administrativa - verifica role do perfil
 function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
 
   if (loading) {
     return (
@@ -76,12 +70,36 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
     return <AdminLogin />
   }
 
-  // Se está logado mas não é um email autorizado, redireciona para Home
-  if (!user.email || !ADMIN_EMAILS.includes(user.email)) {
+  // Se está logado mas não tem role de admin, redireciona para Home
+  if (profile?.role !== 'admin') {
     return <Navigate to="/" replace />
   }
 
   // Acesso autorizado
+  return <>{children}</>
+}
+
+// Guard para rotas de locador - verifica tipo_usuario do perfil
+function LocadorGuard({ children }: { children: React.ReactNode }) {
+  const { profile, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="text-center">
+          <TraktoLogo size="lg" />
+          <p className="text-gray-500 mt-4">Verificando acesso...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Se não é locador, redireciona para Home (área do cliente)
+  if (profile?.tipo_usuario !== 'locador') {
+    return <Navigate to="/" replace />
+  }
+
+  // Acesso autorizado - é locador
   return <>{children}</>
 }
 
@@ -142,9 +160,10 @@ function AppRoutes() {
           <>
             <Route path="/" element={<Home />} />
             <Route path="/product/:id" element={<ProductDetail />} />
-            <Route path="/dashboard" element={<OwnerDashboard />} />
-            <Route path="/equipments" element={<OwnerDashboard />} />
-            <Route path="/meus-equipamentos" element={<MeusEquipamentos />} />
+            {/* Rotas exclusivas do locador - protegidas por guard */}
+            <Route path="/dashboard" element={<LocadorGuard><OwnerDashboard /></LocadorGuard>} />
+            <Route path="/equipments" element={<LocadorGuard><OwnerDashboard /></LocadorGuard>} />
+            <Route path="/meus-equipamentos" element={<LocadorGuard><MeusEquipamentos /></LocadorGuard>} />
             <Route path="/orders" element={<MeusPedidos />} />
             <Route path="/meus-pedidos" element={<MeusPedidos />} />
             <Route path="/favoritos" element={<Favoritos />} />
@@ -187,6 +206,11 @@ function App() {
                   title: 'text-slate-900 dark:text-white font-bold',
                   description: 'text-slate-600 dark:text-slate-300',
                   closeButton: 'bg-gray-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700',
+                  // Garante contraste em toasts de sucesso/erro/info
+                  success: 'bg-green-600 dark:bg-green-700 text-white border-green-500 dark:border-green-600 [&>div]:text-white [&_svg]:text-white',
+                  error: 'bg-red-600 dark:bg-red-700 text-white border-red-500 dark:border-red-600 [&>div]:text-white [&_svg]:text-white',
+                  info: 'bg-blue-600 dark:bg-blue-700 text-white border-blue-500 dark:border-blue-600 [&>div]:text-white [&_svg]:text-white',
+                  warning: 'bg-amber-500 dark:bg-amber-600 text-white border-amber-400 dark:border-amber-500 [&>div]:text-white [&_svg]:text-white',
                 },
               }}
             />
