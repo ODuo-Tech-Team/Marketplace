@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { HardHat, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { useApp } from '../contexts/AppContext'
+import { useApp, type InspectionPhotoPosition } from '../contexts/AppContext'
 import { supabase } from '../lib/supabase'
 import { useChat, useToast } from '../hooks'
 import { normalizeId } from '../utils/chat'
@@ -18,12 +18,13 @@ import {
   ReviewCard
 } from '../components/chat'
 import { ChatStatusBar } from '../components/chat/ChatStatusBar'
+import InspectionWizard from '../components/chat/InspectionWizard'
 
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { enviarMensagem, enviarProposta, fetchProposta, responderProposta, marcarComoEntregue, despacharEquipamento, confirmarRetorno } = useApp()
+  const { enviarMensagem, enviarProposta, fetchProposta, responderProposta, marcarComoEntregue, despacharEquipamento, confirmarRetorno, uploadInspectionPhotos, saveInspectionAndDispatch } = useApp()
 
   const { chat, mensagens, loading, carregarChat, carregarMensagens } = useChat(chatId)
   const { erro, sucesso, mostrarErro, mostrarSucesso, limparErro, limparSucesso } = useToast()
@@ -37,6 +38,7 @@ export default function ChatPage() {
   const [apagandoProposta, setApagandoProposta] = useState(false)
   const [despachando, setDespachando] = useState(false)
   const [confirmandoDevolucao, setConfirmandoDevolucao] = useState(false)
+  const [inspectionWizardOpen, setInspectionWizardOpen] = useState(false)
 
   const inputMensagemRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -233,15 +235,46 @@ export default function ChatPage() {
     }
   }
 
-  const handleDespachar = async () => {
+  // Abre o wizard de vistoria ao clicar em "Despachar"
+  const handleDespachar = () => {
     if (!chat?.proposta?.id || !chat?.equipamento?.id) return
+    setInspectionWizardOpen(true)
+  }
+
+  // Callback quando a vistoria for completada
+  const handleInspectionComplete = async (
+    photos: Map<InspectionPhotoPosition, File>,
+    avarias: string,
+    declaracaoAceita: boolean
+  ) => {
+    if (!chat?.proposta?.id || !chat?.equipamento?.id || !chatId || !user) return
 
     setDespachando(true)
     try {
-      const result = await despacharEquipamento(chat.proposta.id, chat.equipamento.id)
+      // 1. Upload das fotos de inspeção
+      const uploadResult = await uploadInspectionPhotos(photos, chat.locador_id, chat.proposta.id)
+
+      if (uploadResult.error) {
+        mostrarErro(`Erro ao fazer upload das fotos: ${uploadResult.error}`)
+        setDespachando(false)
+        return
+      }
+
+      // 2. Salva inspeção e despacha equipamento
+      const result = await saveInspectionAndDispatch(
+        chat.proposta.id,
+        chat.equipamento.id,
+        chatId,
+        {
+          photos: uploadResult.photos,
+          avarias,
+          declaracaoAceita
+        }
+      )
 
       if (result.success) {
-        mostrarSucesso('Equipamento despachado! O cliente sera notificado.')
+        setInspectionWizardOpen(false)
+        mostrarSucesso('Vistoria registrada! Equipamento despachado com sucesso.')
         await carregarChat()
         await carregarMensagens()
       } else {
@@ -423,6 +456,15 @@ export default function ChatPage() {
         equipamentoPreco={chat.equipamento?.preco_diaria}
         quantidadeDias={chat.quantidade_dias}
         precisaOperador={chat.precisa_operador}
+      />
+
+      {/* Wizard de Vistoria Digital (Súmula 492) */}
+      <InspectionWizard
+        isOpen={inspectionWizardOpen}
+        onClose={() => setInspectionWizardOpen(false)}
+        onComplete={handleInspectionComplete}
+        loading={despachando}
+        equipamentoNome={chat.equipamento?.nome || 'Equipamento'}
       />
     </div>
   )

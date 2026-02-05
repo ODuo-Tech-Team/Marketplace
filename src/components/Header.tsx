@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Search, ChevronDown, User, LogOut, Bell, Sun, Moon, Package, Clock, FileText, Heart } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Search, ChevronDown, User, LogOut, Bell, Sun, Moon, Package, Clock, FileText, Heart, LogIn, UserPlus } from 'lucide-react'
 import { VERTICALS, VERTICAL_CONFIGS, type VerticalKey } from '../config/verticals'
 import { ESTADOS_BR } from '../contexts/AppContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { useAuth } from '../contexts/AuthContext'
 import TraktoLogo from './TraktoLogo'
 
 interface HeaderProps {
@@ -38,6 +39,8 @@ export default function Header({
   const ondeRef = useRef<HTMLDivElement>(null)
   const userRef = useRef<HTMLDivElement>(null)
   const { theme, toggleTheme } = useTheme()
+  const { user } = useAuth()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -150,34 +153,39 @@ export default function Header({
       </div>
 
 
-      {/* ====== USER MENU ====== */}
+      {/* ====== USER MENU / LOGIN BUTTONS ====== */}
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Mensagens/Pedidos - Versão Desktop */}
-        <Link
-          to="/chats"
-          className="hidden sm:flex flex-col items-start text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 rounded-lg relative"
-        >
-          <span className="text-[10px] text-slate-500 dark:text-slate-400">Mensagens</span>
-          <span className="text-xs font-bold">e Pedidos</span>
-          {mensagensNaoLidas > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-              {mensagensNaoLidas}
-            </span>
-          )}
-        </Link>
+        {/* Conteúdo para usuários LOGADOS */}
+        {user ? (
+          <>
+            {/* Mensagens/Pedidos - Versão Desktop */}
+            <Link
+              to="/chats"
+              className="hidden sm:flex flex-col items-start text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 rounded-lg relative"
+            >
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">Mensagens</span>
+              <span className="text-xs font-bold">e Pedidos</span>
+              {mensagensNaoLidas > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                  {mensagensNaoLidas}
+                </span>
+              )}
+            </Link>
 
-        {/* Mensagens - Versão Mobile (apenas ícone sino) */}
-        <Link
-          to="/chats"
-          className="sm:hidden p-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative"
-        >
-          <Bell size={20} />
-          {mensagensNaoLidas > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-              {mensagensNaoLidas}
-            </span>
-          )}
-        </Link>
+            {/* Mensagens - Versão Mobile (apenas ícone sino) */}
+            <Link
+              to="/chats"
+              className="sm:hidden p-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative"
+            >
+              <Bell size={20} />
+              {mensagensNaoLidas > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                  {mensagensNaoLidas}
+                </span>
+              )}
+            </Link>
+          </>
+        ) : null}
 
         <button
           onClick={toggleTheme}
@@ -187,79 +195,109 @@ export default function Header({
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>
 
-        {/* User Menu (Mobile + Desktop) */}
-        <div
-          ref={userRef}
-          className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 rounded-lg relative"
-          onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-        >
-          <User size={20} />
-          <div className="hidden sm:flex flex-col items-start">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Olá, {nomeUsuario.split(' ')[0]}</span>
-            <span className="text-xs font-bold flex items-center gap-1">Conta <ChevronDown size={12} /></span>
-          </div>
-
-          {isUserMenuOpen && (
-            <div className="absolute top-12 right-0 w-[280px] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 py-3 z-50 animate-in fade-in zoom-in-95">
-
-              {/* Meus Aluguéis - Histórico de locações do cliente */}
-              <Link
-                to="/meus-pedidos"
-                className="flex items-center gap-3 mx-3 mb-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white transition-colors"
-                onClick={() => setIsUserMenuOpen(false)}
-              >
-                <Package size={20} />
-                <span className="font-bold">Meus Aluguéis</span>
-              </Link>
-
-              {/* Meus Pedidos - Negociações em andamento */}
-              <Link
-                to="/chats"
-                className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors relative"
-                onClick={() => setIsUserMenuOpen(false)}
-              >
-                <Clock size={20} />
-                <span className="font-medium">Meus Pedidos</span>
-                {mensagensNaoLidas > 0 && (
-                  <span className="ml-auto bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                    {mensagensNaoLidas}
-                  </span>
-                )}
-              </Link>
-
-              {/* Documentos - Contratos e comprovantes */}
-              <Link
-                to="/meus-pedidos"
-                className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-                onClick={() => setIsUserMenuOpen(false)}
-              >
-                <FileText size={20} />
-                <span className="font-medium">Documentos</span>
-              </Link>
-
-              {/* Favoritos */}
-              <Link
-                to="/meus-pedidos"
-                className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-                onClick={() => setIsUserMenuOpen(false)}
-              >
-                <Heart size={20} />
-                <span className="font-medium">Favoritos</span>
-              </Link>
-
-              {/* Sair */}
-              <div className="border-t border-gray-200 dark:border-white/10 mt-3 pt-3 px-3">
-                <button
-                  onClick={() => { onSignOut(); setIsUserMenuOpen(false) }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                >
-                  <LogOut size={18} />
-                  <span className="font-bold">Sair</span>
-                </button>
-              </div>
+        {/* Conteúdo condicional: Logado = Menu do usuário / Não logado = Botões de login */}
+        {user ? (
+          /* User Menu (Mobile + Desktop) - Para usuários LOGADOS */
+          <div
+            ref={userRef}
+            className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 rounded-lg relative"
+            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+          >
+            <User size={20} />
+            <div className="hidden sm:flex flex-col items-start">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">Olá, {nomeUsuario.split(' ')[0]}</span>
+              <span className="text-xs font-bold flex items-center gap-1">Conta <ChevronDown size={12} /></span>
             </div>
-          )}
-        </div>
+
+            {isUserMenuOpen && (
+              <div className="absolute top-12 right-0 w-[280px] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 py-3 z-50 animate-in fade-in zoom-in-95">
+
+                {/* Meus Aluguéis - Histórico de locações do cliente */}
+                <Link
+                  to="/meus-pedidos"
+                  className="flex items-center gap-3 mx-3 mb-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white transition-colors"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <Package size={20} />
+                  <span className="font-bold">Meus Aluguéis</span>
+                </Link>
+
+                {/* Meus Pedidos - Negociações em andamento */}
+                <Link
+                  to="/chats"
+                  className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors relative"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <Clock size={20} />
+                  <span className="font-medium">Meus Pedidos</span>
+                  {mensagensNaoLidas > 0 && (
+                    <span className="ml-auto bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                      {mensagensNaoLidas}
+                    </span>
+                  )}
+                </Link>
+
+                {/* Documentos - Contratos e comprovantes */}
+                <Link
+                  to="/meus-pedidos"
+                  className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <FileText size={20} />
+                  <span className="font-medium">Documentos</span>
+                </Link>
+
+                {/* Favoritos */}
+                <Link
+                  to="/meus-pedidos"
+                  className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  <Heart size={20} />
+                  <span className="font-medium">Favoritos</span>
+                </Link>
+
+                {/* Sair */}
+                <div className="border-t border-gray-200 dark:border-white/10 mt-3 pt-3 px-3">
+                  <button
+                    onClick={() => { onSignOut(); setIsUserMenuOpen(false) }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                  >
+                    <LogOut size={18} />
+                    <span className="font-bold">Sair</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Botões de Login/Cadastro - Para usuários NÃO LOGADOS */
+          <div className="flex items-center gap-2">
+            {/* Entrar - Desktop */}
+            <button
+              onClick={() => navigate('/auth', { state: { mode: 'login' } })}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 border border-gray-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 rounded-xl font-medium transition-all"
+            >
+              <LogIn size={18} />
+              Entrar
+            </button>
+            {/* Cadastrar - Desktop */}
+            <button
+              onClick={() => navigate('/auth', { state: { mode: 'signup' } })}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30"
+            >
+              <UserPlus size={18} />
+              Cadastrar
+            </button>
+            {/* Mobile: Apenas ícone de usuário que leva para auth */}
+            <button
+              onClick={() => navigate('/auth')}
+              className="sm:hidden p-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            >
+              <User size={20} />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   )

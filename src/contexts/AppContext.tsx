@@ -28,6 +28,7 @@ export interface Equipamento {
   locador_destacado?: boolean | null     // Locador PRO (pagou pelo destaque)
   locador_rating_average?: number | null  // Média de avaliações do locador
   locador_reviews_count?: number | null   // Total de avaliações do locador
+  locador_tem_loja?: boolean | null       // Locador tem loja/vitrine ativa (monetizacao)
   // Novos campos para Linha Amarela
   ano?: number | null                    // Ano de fabricação
   horimetro_atual?: number | null        // Horímetro em horas
@@ -55,6 +56,28 @@ export const EQUIPMENT_STATUS = {
 } as const
 
 export type EquipmentStatus = typeof EQUIPMENT_STATUS[keyof typeof EQUIPMENT_STATUS]
+
+// ===== INSPECTION TYPES (Súmula 492) =====
+export type InspectionPhotoPosition = 'frente' | 'traseira' | 'lateral_esquerda' | 'lateral_direita'
+
+export interface InspectionPhoto {
+  position: InspectionPhotoPosition
+  url: string
+  uploaded_at: string
+}
+
+export interface InspectionData {
+  photos: InspectionPhoto[]
+  avarias: string
+  declaracaoAceita: boolean
+}
+
+export const INSPECTION_PHOTO_POSITIONS: { key: InspectionPhotoPosition; label: string }[] = [
+  { key: 'frente', label: 'Frente' },
+  { key: 'traseira', label: 'Traseira' },
+  { key: 'lateral_esquerda', label: 'Lateral Esquerda' },
+  { key: 'lateral_direita', label: 'Lateral Direita' },
+]
 
 // Helper para verificar se equipamento está disponível
 export const isEquipamentoDisponivel = (eq: Equipamento): boolean => {
@@ -155,7 +178,34 @@ export interface Mensagem {
   texto: string      // Nome correto no banco
   lida?: boolean
   created_at: string
+  // Campos para anexos de arquivo
+  arquivo_url?: string | null      // Path relativo no Storage
+  arquivo_nome?: string | null     // Nome original do arquivo
+  arquivo_tipo?: string | null     // MIME type (ex: application/pdf)
+  arquivo_tamanho?: number | null  // Tamanho em bytes
 }
+
+// Interface para upload de arquivo no chat
+export interface ArquivoChat {
+  url: string        // Path relativo no Storage
+  nome: string       // Nome original
+  tipo: string       // MIME type
+  tamanho: number    // Tamanho em bytes
+}
+
+// Tipos de arquivo permitidos no chat
+export const TIPOS_ARQUIVO_PERMITIDOS = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+] as const
+
+// Tamanho maximo do arquivo (10MB)
+export const TAMANHO_MAX_ARQUIVO = 10 * 1024 * 1024
 
 // RAIO-X: propostas tem equipamento_id, usuario_id, status, endereco_*
 // NÃO tem: chat_id, valor_diaria, quantidade_dias, valor_frete, valor_total
@@ -190,6 +240,11 @@ export interface Proposta {
   com_operador?: boolean | null
   valor_operador_diaria?: number | null
   tipo_veiculo_transporte?: string | null
+  // Campos de Vistoria Digital (Súmula 492)
+  inspection_photos?: InspectionPhoto[] | null
+  inspection_avarias?: string | null
+  inspection_completed_at?: string | null
+  inspection_declaracao_aceita?: boolean | null
 }
 
 // Review (avaliação de locação)
@@ -407,6 +462,31 @@ interface AppContextType {
   submitReview: (rentalId: string, reviewerId: string, targetId: string, rating: number, comment: string) => Promise<{ success: boolean; error?: string }>
   fetchLocadorReviews: (locadorId: string) => Promise<Review[]>
   checkReviewExists: (rentalId: string) => Promise<boolean>
+  // Vistoria Digital (Súmula 492)
+  uploadInspectionPhotos: (
+    files: Map<InspectionPhotoPosition, File>,
+    locadorId: string,
+    propostaId: string
+  ) => Promise<{ photos: InspectionPhoto[]; error?: string }>
+  saveInspectionAndDispatch: (
+    propostaId: string,
+    equipamentoId: string,
+    chatId: string,
+    inspection: InspectionData
+  ) => Promise<{ success: boolean; error?: string }>
+  // Upload de arquivos no chat
+  uploadArquivoChat: (
+    file: File,
+    chatId: string,
+    senderId: string
+  ) => Promise<{ arquivo: ArquivoChat | null; error?: string }>
+  // Enviar mensagem com arquivo anexado
+  enviarMensagemComArquivo: (
+    chatId: string,
+    senderId: string,
+    arquivo: ArquivoChat,
+    texto?: string
+  ) => Promise<{ success: boolean; error?: string }>
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -438,7 +518,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             verificado,
             destacado,
             rating_average,
-            reviews_count
+            reviews_count,
+            tem_loja
           )
         `)
         .in('status', ['DISPONIVEL', 'disponivel'])
@@ -460,7 +541,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         // Mapeia os dados para incluir campos do locador no formato esperado
         const equipamentosComLocador = (data || []).map(eq => {
-          const locador = eq.locador as { full_name?: string; nome_empresa?: string; verificado?: boolean; destacado?: boolean; rating_average?: number; reviews_count?: number } | null
+          const locador = eq.locador as { full_name?: string; nome_empresa?: string; verificado?: boolean; destacado?: boolean; rating_average?: number; reviews_count?: number; tem_loja?: boolean } | null
           return {
             ...eq,
             locador_nome_empresa: locador?.nome_empresa || null,
@@ -469,6 +550,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             locador_destacado: locador?.destacado || false,
             locador_rating_average: locador?.rating_average ?? null,
             locador_reviews_count: locador?.reviews_count ?? null,
+            locador_tem_loja: locador?.tem_loja || false,
             locador: undefined
           }
         })
@@ -494,7 +576,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             verificado,
             destacado,
             rating_average,
-            reviews_count
+            reviews_count,
+            tem_loja
           )
         `)
         .eq('id', id)
@@ -502,14 +585,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error || !data) return null
 
-      const locador = data.locador as { full_name?: string; nome_empresa?: string; verificado?: boolean; rating_average?: number; reviews_count?: number } | null
+      const locador = data.locador as { full_name?: string; nome_empresa?: string; verificado?: boolean; destacado?: boolean; rating_average?: number; reviews_count?: number; tem_loja?: boolean } | null
       return {
         ...data,
         locador_nome_empresa: locador?.nome_empresa || null,
         locador_full_name: locador?.full_name || null,
         locador_verificado: locador?.verificado || false,
+        locador_destacado: locador?.destacado || false,
         locador_rating_average: locador?.rating_average ?? null,
         locador_reviews_count: locador?.reviews_count ?? null,
+        locador_tem_loja: locador?.tem_loja || false,
         locador: undefined
       }
     } catch {
@@ -1765,6 +1850,185 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // ===== VISTORIA DIGITAL (Súmula 492) =====
+
+  // Upload de fotos de inspeção para o Storage
+  const uploadInspectionPhotos = async (
+    files: Map<InspectionPhotoPosition, File>,
+    locadorId: string,
+    propostaId: string
+  ): Promise<{ photos: InspectionPhoto[]; error?: string }> => {
+    const photos: InspectionPhoto[] = []
+
+    for (const [position, file] of files) {
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      // Pattern: {locadorId}/inspection/{propostaId}/{position}-{timestamp}.{ext}
+      const fileName = `${locadorId}/inspection/${propostaId}/${position}-${Date.now()}.${fileExt}`
+
+      const { error } = await supabase.storage
+        .from('equipamentos')
+        .upload(fileName, file, { cacheControl: '3600', upsert: false })
+
+      if (error) {
+        // Se houver erro, tenta deletar as fotos já uploadadas
+        for (const photo of photos) {
+          await supabase.storage.from('equipamentos').remove([photo.url])
+        }
+        return { photos: [], error: `Erro ao fazer upload da foto ${position}: ${error.message}` }
+      }
+
+      photos.push({
+        position,
+        url: fileName,
+        uploaded_at: new Date().toISOString()
+      })
+    }
+
+    return { photos }
+  }
+
+  // Salva dados de inspeção e despacha o equipamento
+  const saveInspectionAndDispatch = async (
+    propostaId: string,
+    equipamentoId: string,
+    chatId: string,
+    inspection: InspectionData
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // 1. Atualiza proposta com dados de inspeção
+      const { error: inspectionError } = await supabase
+        .from('propostas')
+        .update({
+          inspection_photos: inspection.photos,
+          inspection_avarias: inspection.avarias || null,
+          inspection_declaracao_aceita: inspection.declaracaoAceita,
+          inspection_completed_at: new Date().toISOString(),
+          status_entrega: 'ENTREGUE'
+        })
+        .eq('id', propostaId)
+
+      if (inspectionError) {
+        return { success: false, error: `Erro ao salvar inspeção: ${inspectionError.message}` }
+      }
+
+      // 2. Atualiza status do equipamento para OCUPADO
+      const { error: eqError } = await supabase
+        .from('equipamentos')
+        .update({ status: 'OCUPADO' })
+        .eq('id', equipamentoId)
+
+      if (eqError) {
+        return { success: false, error: `Erro ao atualizar equipamento: ${eqError.message}` }
+      }
+
+      // 3. Envia mensagem automática no chat
+      await supabase.from('mensagens').insert({
+        chat_id: chatId,
+        sender_id: SYSTEM_SENDER_ID,
+        texto: '📋 Vistoria de saída registrada!\n🚛 Equipamento despachado com sucesso.',
+        lida: false
+      })
+
+      await fetchEquipamentos()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: 'Erro inesperado ao salvar inspeção e despachar' }
+    }
+  }
+
+  // Upload de arquivo no chat (contratos, PDFs, imagens)
+  const uploadArquivoChat = async (
+    file: File,
+    chatId: string,
+    senderId: string
+  ): Promise<{ arquivo: ArquivoChat | null; error?: string }> => {
+    try {
+      // Valida tipo de arquivo
+      const tiposPermitidos = [
+        'application/pdf',
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ]
+
+      if (!tiposPermitidos.includes(file.type)) {
+        return { arquivo: null, error: 'Tipo de arquivo nao permitido. Use PDF, imagens ou documentos Word.' }
+      }
+
+      // Valida tamanho (max 10MB)
+      const maxSize = 10 * 1024 * 1024
+      if (file.size > maxSize) {
+        return { arquivo: null, error: 'Arquivo muito grande. Maximo permitido: 10MB' }
+      }
+
+      // Gera nome unico para o arquivo
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin'
+      const timestamp = Date.now()
+      const randomStr = Math.random().toString(36).substring(2, 9)
+      const fileName = `chat-files/${chatId}/${senderId}/${timestamp}-${randomStr}.${fileExt}`
+
+      // Faz upload para o Supabase Storage (bucket: equipamentos)
+      const { data, error: uploadError } = await supabase.storage
+        .from('equipamentos')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('Erro no upload de arquivo do chat:', uploadError)
+        return { arquivo: null, error: 'Erro ao fazer upload do arquivo. Tente novamente.' }
+      }
+
+      return {
+        arquivo: {
+          url: data.path,
+          nome: file.name,
+          tipo: file.type,
+          tamanho: file.size
+        }
+      }
+    } catch (err) {
+      console.error('Erro inesperado no upload:', err)
+      return { arquivo: null, error: 'Erro inesperado ao fazer upload do arquivo' }
+    }
+  }
+
+  // Envia mensagem com arquivo anexado
+  const enviarMensagemComArquivo = async (
+    chatId: string,
+    senderId: string,
+    arquivo: ArquivoChat,
+    texto?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const mensagemTexto = texto || `Arquivo enviado: ${arquivo.nome}`
+
+      const { error } = await supabase.from('mensagens').insert({
+        chat_id: chatId,
+        sender_id: senderId,
+        texto: mensagemTexto,
+        arquivo_url: arquivo.url,
+        arquivo_nome: arquivo.nome,
+        arquivo_tipo: arquivo.tipo,
+        arquivo_tamanho: arquivo.tamanho
+      })
+
+      if (error) {
+        console.error('Erro ao enviar mensagem com arquivo:', error)
+        return { success: false, error: error.message }
+      }
+
+      return { success: true }
+    } catch (err) {
+      console.error('Erro inesperado ao enviar mensagem com arquivo:', err)
+      return { success: false, error: 'Erro inesperado ao enviar mensagem' }
+    }
+  }
+
   // Edita uma proposta pendente (locador pode alterar valores antes do aceite)
   const editarProposta = async (
     propostaId: string,
@@ -2390,7 +2654,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchEquipamentoById,
         submitReview,
         fetchLocadorReviews,
-        checkReviewExists
+        checkReviewExists,
+        uploadInspectionPhotos,
+        saveInspectionAndDispatch,
+        uploadArquivoChat,
+        enviarMensagemComArquivo
       }}
     >
       {children}

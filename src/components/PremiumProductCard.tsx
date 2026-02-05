@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Heart, ArrowRight, Star, MapPin, Crown, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Heart, ArrowRight, Star, MapPin, Crown, Sparkles, Store } from 'lucide-react'
 import FotosCarrossel from './FotosCarrossel'
-import { type Equipamento, isLinhaAmarela } from '../contexts/AppContext'
+import { type Equipamento, isLinhaAmarela, getLocadorDisplayName } from '../contexts/AppContext'
 import { TrustSealsRow } from './TrustSeal'
 import type { VerticalKey } from '../config/verticals'
 
@@ -122,6 +123,18 @@ export default function PremiumProductCard({
               </span>
             ))}
           </div>
+        )}
+
+        {/* Locador com link para loja */}
+        {getLocadorDisplayName(equipamento) && (
+          <Link
+            to={`/loja/${equipamento.locador_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-slate-600 dark:text-slate-400 text-sm mb-1 flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-fit"
+          >
+            <Store size={13} />
+            <span className="truncate max-w-[200px] font-medium">{getLocadorDisplayName(equipamento)}</span>
+          </Link>
         )}
 
         {/* Location */}

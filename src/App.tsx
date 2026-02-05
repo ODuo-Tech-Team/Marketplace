@@ -4,6 +4,7 @@ import { Toaster } from 'sonner'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppProvider, useApp } from './contexts/AppContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { LoginModalProvider } from './contexts/LoginModalContext'
 import AuthPage from './pages/AuthPage'
 import Home from './pages/Home'
 import OwnerDashboard from './components/OwnerDashboard'
@@ -15,9 +16,12 @@ import AdminLogin from './pages/AdminLogin'
 import ProductDetail from './pages/ProductDetail'
 import MeusPedidos from './pages/MeusPedidos'
 import Favoritos from './pages/Favoritos'
+import Storefront from './pages/Storefront'
+import StoreSettings from './pages/StoreSettings'
 import BottomNav from './components/BottomNav'
 import TraktoLogo from './components/TraktoLogo'
 import { NotificationListener } from './components/NotificationListener'
+import LoginModal from './components/LoginModal'
 
 function SplashScreen({ onForceEntry }: { onForceEntry: () => void }) {
   const [showFailsafe, setShowFailsafe] = useState(false)
@@ -107,7 +111,7 @@ function LocadorGuard({ children }: { children: React.ReactNode }) {
 function LayoutWithBottomNav({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const { mensagensNaoLidas } = useApp()
-  const { profile, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth()
 
   // Verificar se é locador - eles têm seu próprio nav no OwnerDashboard
   const isLocador = profile?.tipo_usuario === 'locador'
@@ -116,10 +120,11 @@ function LayoutWithBottomNav({ children }: { children: React.ReactNode }) {
   // NÃO mostrar no dashboard do locador (ele tem seu próprio nav de 6 abas)
   const isLocadorPage = location.pathname === '/dashboard' || location.pathname === '/equipments'
 
-  // Cliente BottomNav só aparece para clientes (não locadores) em rotas específicas
-  const showBottomNav = !isLocador && !isLocadorPage && (
-    ['/', '/meus-pedidos', '/favoritos'].includes(location.pathname) ||
-    location.pathname.startsWith('/chats')
+  // Cliente BottomNav só aparece para clientes LOGADOS (não locadores) em rotas específicas
+  // Usuários não logados não veem BottomNav - usam Header para entrar/cadastrar
+  // NÃO mostrar em /chats - o chat tem seu próprio sistema de navegação e o BottomNav cobre o input
+  const showBottomNav = user && !isLocador && !isLocadorPage && (
+    ['/', '/meus-pedidos', '/favoritos'].includes(location.pathname)
   )
 
   // Nome do usuário para exibir no menu de perfil
@@ -135,6 +140,8 @@ function LayoutWithBottomNav({ children }: { children: React.ReactNode }) {
           onSignOut={signOut}
         />
       )}
+      {/* Login Modal - Disponível globalmente */}
+      <LoginModal />
     </>
   )
 }
@@ -147,23 +154,30 @@ function AppRoutes() {
     return <SplashScreen onForceEntry={() => setForceEntry(true)} />
   }
 
-  // Rota /admLoca é especial - usa AdminGuard que mostra login próprio se não autenticado
-  // Para usuários normais: logado = PrivateRoutes, deslogado = PublicRoutes
+  // VITRINE PÚBLICA (Browse before Login):
+  // - Home e ProductDetail são PÚBLICOS (acessíveis sem login)
+  // - Outras rotas requerem autenticação
   return (
     <LayoutWithBottomNav>
       <Routes>
         {/* Rota admin com guard próprio - acessível sempre */}
         <Route path="/admLoca" element={<AdminGuard><Adm /></AdminGuard>} />
 
-        {/* Demais rotas baseadas em autenticação */}
+        {/* ROTAS PÚBLICAS - Acessíveis para todos (vitrine) */}
+        <Route path="/" element={<Home />} />
+        <Route path="/product/:id" element={<ProductDetail />} />
+        <Route path="/loja/:locadorId" element={<Storefront />} />
+        <Route path="/store/:locadorId" element={<Storefront />} />
+        <Route path="/auth" element={<AuthPage />} />
+
+        {/* ROTAS PROTEGIDAS - Requerem autenticação */}
         {user ? (
           <>
-            <Route path="/" element={<Home />} />
-            <Route path="/product/:id" element={<ProductDetail />} />
             {/* Rotas exclusivas do locador - protegidas por guard */}
             <Route path="/dashboard" element={<LocadorGuard><OwnerDashboard /></LocadorGuard>} />
             <Route path="/equipments" element={<LocadorGuard><OwnerDashboard /></LocadorGuard>} />
             <Route path="/meus-equipamentos" element={<LocadorGuard><MeusEquipamentos /></LocadorGuard>} />
+            <Route path="/minha-loja" element={<LocadorGuard><StoreSettings /></LocadorGuard>} />
             <Route path="/orders" element={<MeusPedidos />} />
             <Route path="/meus-pedidos" element={<MeusPedidos />} />
             <Route path="/favoritos" element={<Favoritos />} />
@@ -176,8 +190,13 @@ function AppRoutes() {
           </>
         ) : (
           <>
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="*" element={<Navigate to="/auth" replace />} />
+            {/* Redireciona rotas protegidas para Home (onde podem navegar livremente) */}
+            <Route path="/chats/*" element={<Navigate to="/" replace />} />
+            <Route path="/favoritos" element={<Navigate to="/" replace />} />
+            <Route path="/meus-pedidos" element={<Navigate to="/" replace />} />
+            <Route path="/orders" element={<Navigate to="/" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </>
         )}
       </Routes>
@@ -191,9 +210,10 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <AppProvider>
-            <NotificationListener />
-            <AppRoutes />
-            <Toaster
+            <LoginModalProvider>
+              <NotificationListener />
+              <AppRoutes />
+              <Toaster
               position="top-center"
               expand={true}
               richColors
@@ -214,6 +234,7 @@ function App() {
                 },
               }}
             />
+            </LoginModalProvider>
           </AppProvider>
         </AuthProvider>
       </ThemeProvider>

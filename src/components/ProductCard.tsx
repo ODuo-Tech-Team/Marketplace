@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Heart, Star, MapPin, ShieldCheck, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Heart, Star, MapPin, ShieldCheck, ArrowRight, Store } from 'lucide-react'
 import FotosCarrossel from './FotosCarrossel'
 import type { Equipamento } from '../contexts/AppContext'
+import { getLocadorDisplayName } from '../contexts/AppContext'
 import { TrustSealsRow } from './TrustSeal'
 import type { VerticalKey } from '../config/verticals'
+import { useAuth } from '../contexts/AuthContext'
+import { useLoginModal } from '../contexts/LoginModalContext'
 
 const FAVORITES_KEY = 'trakto_favorites'
 
@@ -14,6 +18,9 @@ interface ProductCardProps {
 
 export default function ProductCard({ equipamento, onClick }: ProductCardProps) {
   const [isFav, setIsFav] = useState(false)
+  const { user } = useAuth()
+  const { openLoginModal } = useLoginModal()
+
   useEffect(() => {
     try {
       const ids: string[] = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
@@ -23,6 +30,13 @@ export default function ProductCard({ equipamento, onClick }: ProductCardProps) 
 
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation()
+
+    // Se não estiver logado, abre modal de login
+    if (!user) {
+      openLoginModal('Para favoritar equipamentos, faca login ou crie sua conta')
+      return
+    }
+
     try {
       let ids: string[] = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
       if (ids.includes(equipamento.id)) {
@@ -83,6 +97,18 @@ export default function ProductCard({ equipamento, onClick }: ProductCardProps) 
             </div>
           )}
         </div>
+
+        {/* Locador com link para loja */}
+        {getLocadorDisplayName(equipamento) && (
+          <Link
+            to={`/loja/${equipamento.locador_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-slate-600 dark:text-slate-400 text-xs mb-1 flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-fit"
+          >
+            <Store size={11} />
+            <span className="truncate max-w-[180px]">{getLocadorDisplayName(equipamento)}</span>
+          </Link>
+        )}
 
         {(equipamento.cidade || equipamento.uf) && (
           <p className="text-slate-500 dark:text-slate-400 text-xs mb-2 flex items-center gap-1">

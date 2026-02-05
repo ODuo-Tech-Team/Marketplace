@@ -1,13 +1,14 @@
 import { useState, useEffect, createElement } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useLoginModal } from '../contexts/LoginModalContext'
 import { useApp, type Equipamento, type Review, isLinhaAmarela, getLocadorDisplayName, isEquipamentoDisponivel } from '../contexts/AppContext'
 import { getVerticalConfig, type VerticalKey } from '../config/verticals'
 import { getSpecIcon } from '../config/specIcons'
 import FotosCarrossel from '../components/FotosCarrossel'
 import {
   ArrowLeft, MapPin, ShieldCheck, MessageCircle,
-  Heart, Star, CheckCircle2, X, Loader2, Package, Clock, User, Truck
+  Heart, Star, CheckCircle2, X, Loader2, Package, Clock, User, Truck, Store, ExternalLink
 } from 'lucide-react'
 import TraktoLogo from '../components/TraktoLogo'
 import SolicitarModal from '../components/SolicitarModal'
@@ -16,6 +17,7 @@ export default function ProductDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { openLoginModal } = useLoginModal()
   const { fetchEquipamentoById, iniciarChat, fetchLocadorReviews } = useApp()
 
   const [equipamento, setEquipamento] = useState<Equipamento | null>(null)
@@ -42,6 +44,13 @@ export default function ProductDetail() {
 
   const toggleFavorite = () => {
     if (!id) return
+
+    // Se não estiver logado, abre modal de login
+    if (!user) {
+      openLoginModal('Para favoritar equipamentos, faca login ou crie sua conta')
+      return
+    }
+
     try {
       const raw = localStorage.getItem(FAVORITES_KEY)
       let ids: string[] = raw ? JSON.parse(raw) : []
@@ -54,6 +63,15 @@ export default function ProductDetail() {
       }
       localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids))
     } catch { /* ignore */ }
+  }
+
+  // Handler para solicitar reserva (verifica login)
+  const handleSolicitarReserva = () => {
+    if (!user) {
+      openLoginModal('Para solicitar uma reserva, faca login ou crie sua conta')
+      return
+    }
+    setShowSolicitarModal(true)
   }
 
   useEffect(() => {
@@ -248,28 +266,42 @@ export default function ProductDetail() {
           {/* Owner Profile Mini */}
           {locadorNome && (
             <div className="flex items-center justify-between p-3 rounded-2xl border border-border-subtle bg-surface-elevated mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-foreground-secondary font-bold">
+              <Link
+                to={`/loja/${equipamento.locador_id}`}
+                className="flex items-center gap-3 flex-1 group"
+              >
+                <div className="w-10 h-10 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-foreground-secondary font-bold group-hover:border-indigo-400 transition-colors">
                   {locadorInicial}
                 </div>
                 <div>
-                  <p className="text-[10px] text-foreground-muted font-bold uppercase tracking-wide">Proprietário</p>
-                  <p className="text-sm font-black text-foreground">{locadorNome}</p>
+                  <p className="text-[10px] text-foreground-muted font-bold uppercase tracking-wide">Proprietario</p>
+                  <p className="text-sm font-black text-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{locadorNome}</p>
                   {(equipamento.locador_reviews_count || 0) > 0 ? (
                     <div className="flex items-center gap-1 text-xs font-bold text-cta">
                       <Star size={10} fill="currentColor" /> {(equipamento.locador_rating_average || 0).toFixed(1)}
                     </div>
                   ) : (
-                    <p className="text-xs text-foreground-muted">Sem avaliações</p>
+                    <p className="text-xs text-foreground-muted">Sem avaliacoes</p>
                   )}
                 </div>
+              </Link>
+              <div className="flex items-center gap-2">
+                {equipamento.locador_tem_loja && (
+                  <Link
+                    to={`/loja/${equipamento.locador_id}`}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-all flex items-center gap-1.5"
+                  >
+                    <Store size={12} />
+                    Ver Loja
+                  </Link>
+                )}
+                <button
+                  onClick={handleOpenProfileModal}
+                  className="px-3 py-1.5 rounded-xl bg-surface-elevated text-foreground-secondary font-bold text-xs hover:bg-glass-hover hover:text-foreground transition-all"
+                >
+                  Perfil
+                </button>
               </div>
-              <button
-                onClick={handleOpenProfileModal}
-                className="px-4 py-1.5 rounded-xl bg-surface-elevated text-foreground-secondary font-bold text-xs hover:bg-glass-hover hover:text-foreground transition-all"
-              >
-                Ver Perfil
-              </button>
             </div>
           )}
 
@@ -310,7 +342,7 @@ export default function ProductDetail() {
           <div className="max-w-md mx-auto">
             {disponivel ? (
               <button
-                onClick={() => setShowSolicitarModal(true)}
+                onClick={handleSolicitarReserva}
                 className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <MessageCircle size={20} />
@@ -395,10 +427,13 @@ export default function ProductDetail() {
                 <h1 className="text-4xl md:text-5xl font-black text-foreground leading-tight mb-6">{equipamento.nome}</h1>
 
                 {/* Card do Dono Dark */}
-                <div className="flex items-center justify-between p-5 rounded-3xl border border-border-subtle bg-surface-card hover:border-border transition-colors cursor-pointer group/owner">
-                  <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between p-5 rounded-3xl border border-border-subtle bg-surface-card hover:border-border transition-colors group/owner">
+                  <Link
+                    to={`/loja/${equipamento.locador_id}`}
+                    className="flex items-center gap-4 flex-1"
+                  >
                     <div className="relative">
-                      <div className="w-16 h-16 rounded-full bg-surface-elevated border-2 border-surface-elevated flex items-center justify-center text-foreground-secondary font-bold text-xl">
+                      <div className="w-16 h-16 rounded-full bg-surface-elevated border-2 border-surface-elevated flex items-center justify-center text-foreground-secondary font-bold text-xl group-hover/owner:border-indigo-500 transition-colors">
                         {locadorInicial}
                       </div>
                       {equipamento.locador_verificado && (
@@ -408,26 +443,37 @@ export default function ProductDetail() {
                       )}
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wide">Proprietário</p>
-                      <h4 className="font-bold text-foreground text-lg group-hover/owner:text-cta transition-colors">{locadorNome}</h4>
+                      <p className="text-[10px] font-bold text-foreground-muted uppercase tracking-wide">Proprietario</p>
+                      <h4 className="font-bold text-foreground text-lg group-hover/owner:text-indigo-400 transition-colors">{locadorNome}</h4>
                       {(equipamento.locador_reviews_count || 0) > 0 ? (
                         <div className="flex items-center gap-3 text-xs font-medium text-foreground-secondary mt-1">
                           <span className="flex items-center gap-1 text-cta font-bold">
                             <Star size={12} fill="currentColor" /> {(equipamento.locador_rating_average || 0).toFixed(1)}
                           </span>
-                          <span>({equipamento.locador_reviews_count} avaliações)</span>
+                          <span>({equipamento.locador_reviews_count} avaliacoes)</span>
                         </div>
                       ) : (
-                        <p className="text-xs text-foreground-muted mt-1">Sem avaliações</p>
+                        <p className="text-xs text-foreground-muted mt-1">Sem avaliacoes</p>
                       )}
                     </div>
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    {equipamento.locador_tem_loja && (
+                      <Link
+                        to={`/loja/${equipamento.locador_id}`}
+                        className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                      >
+                        <Store size={14} />
+                        Ver Loja
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleOpenProfileModal}
+                      className="px-4 py-2.5 rounded-xl bg-surface-elevated text-foreground-secondary font-bold text-sm hover:bg-glass-hover hover:text-foreground transition-colors"
+                    >
+                      Perfil
+                    </button>
                   </div>
-                  <button
-                    onClick={handleOpenProfileModal}
-                    className="px-5 py-2.5 rounded-xl bg-surface-elevated text-foreground-secondary font-bold text-sm hover:bg-glass-hover hover:text-foreground transition-colors"
-                  >
-                    Ver Perfil
-                  </button>
                 </div>
               </div>
 
@@ -480,7 +526,7 @@ export default function ProductDetail() {
                 {/* CTA */}
                 {disponivel ? (
                   <button
-                    onClick={() => setShowSolicitarModal(true)}
+                    onClick={handleSolicitarReserva}
                     className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mb-4"
                   >
                     <MessageCircle size={20} />

@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import {
   Building2, User, Phone, MapPin, Mail, Lock, Globe,
   CheckCircle2, ChevronRight, ArrowLeft, Loader2,
@@ -27,9 +28,25 @@ type ViewState =
 
 export default function AuthPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { recarregarProfile } = useAuth()
 
   // Navigation
   const [view, setView] = useState<ViewState>('decision')
+
+  // Handle mode from navigation state (from LoginModal/Header)
+  useEffect(() => {
+    const state = location.state as { mode?: 'login' | 'signup' } | null
+    if (state?.mode === 'login') {
+      setView('login')
+    } else if (state?.mode === 'signup') {
+      setView('decision')
+    }
+    // Clear the state to prevent re-triggering on refresh
+    if (state?.mode) {
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
   const [flowType, setFlowType] = useState<FlowType>(null)
 
   // Shared fields
@@ -264,6 +281,26 @@ export default function AuthPage() {
         return
       }
 
+      // Verifica se o usuário é admin para redirecionar corretamente
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (profile?.role === 'admin') {
+          // Aguarda o AuthContext atualizar o profile antes de navegar
+          // Isso evita que o AdminGuard redirecione de volta para Home
+          await recarregarProfile()
+          navigate('/admLoca')
+          return
+        }
+      }
+
+      // Para usuários não-admin, também recarrega o profile para garantir sincronização
+      await recarregarProfile()
       navigate('/')
     } catch {
       setError('Erro inesperado. Tente novamente.')

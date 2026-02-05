@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
   useApp, type Equipamento, type Chat, type Proposta, type EntregaPendente,
-  type NovoEquipamento, type Consumivel,
+  type NovoEquipamento, type Consumivel, type InspectionPhotoPosition,
   isLinhaAmarela, ESTADOS_BR, VOLTAGENS
 } from '../contexts/AppContext'
 import { VERTICAL_CONFIGS, VERTICALS, type VerticalKey, getVerticalConfig } from '../config/verticals'
@@ -14,7 +14,7 @@ import {
   ArrowUpRight, ArrowDownLeft,
   Loader2, LogOut, Bell, Send, Pencil, Trash2, RotateCcw,
   MoreVertical, BarChart3, CreditCard, CheckCircle2,
-  ImagePlus, HardHat, X, Wrench, Zap, Sun, Moon
+  ImagePlus, HardHat, X, Wrench, Zap, Sun, Moon, Store
 } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 import Sparkline from './Sparkline'
@@ -24,8 +24,9 @@ import { ConsumiveisManager } from './ConsumiveisManager'
 import { ContractGenerator } from './ContractGenerator'
 import { FinancialWallet } from './FinancialWallet'
 import { FileText } from 'lucide-react'
+import InspectionWizard from './chat/InspectionWizard'
 
-type TabKey = 'overview' | 'chat' | 'fleet' | 'finance' | 'wallet' | 'contracts' | 'calendar'
+type TabKey = 'overview' | 'chat' | 'fleet' | 'finance' | 'wallet' | 'contracts' | 'calendar' | 'store'
 
 // ========== LOVABLE/G4 THEME MAP ==========
 const THEME_MAP: Record<string, {
@@ -69,6 +70,7 @@ const TAB_TITLES: Record<TabKey, string> = {
   wallet: 'Carteira',
   contracts: 'Contratos',
   calendar: 'Calendário',
+  store: 'Minha Loja',
 }
 
 // ========== CONFIRMAR EXCLUSÃO MODAL (Lovable) ==========
@@ -1122,6 +1124,321 @@ function CalendarioUnificado({ equipamentos, propostas, onEquipamentoClick }: Ca
   )
 }
 
+// ========== STORE SETTINGS TAB COMPONENT ==========
+function StoreSettingsTab() {
+  const { user, profile, recarregarProfile } = useAuth()
+
+  // Estados do formulario
+  const [bannerUrl, setBannerUrl] = useState(profile?.banner_url || null)
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || null)
+  const [corMarca, setCorMarca] = useState(profile?.cor_marca || '#4f46e5')
+  const [lojaSlug, setLojaSlug] = useState(profile?.loja_slug || '')
+  const [bio, setBio] = useState(profile?.bio || '')
+
+  const [slugValidation, setSlugValidation] = useState<{ checking: boolean; available: boolean | null; reason: string | null }>({
+    checking: false, available: null, reason: null
+  })
+  const [saving, setSaving] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  const bannerInputRef = useRef<HTMLInputElement>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const slugDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Sync com profile
+  useEffect(() => {
+    if (profile) {
+      setBannerUrl(profile.banner_url || null)
+      setAvatarUrl(profile.avatar_url || null)
+      setCorMarca(profile.cor_marca || '#4f46e5')
+      setLojaSlug(profile.loja_slug || '')
+      setBio(profile.bio || '')
+    }
+  }, [profile])
+
+  // Validar slug
+  const validateSlug = useCallback(async (slug: string) => {
+    if (!slug || slug.length < 3) {
+      setSlugValidation({ checking: false, available: null, reason: slug ? 'Minimo 3 caracteres' : null })
+      return
+    }
+
+    setSlugValidation({ checking: true, available: null, reason: null })
+
+    try {
+      const { data, error } = await supabase.rpc('check_slug_availability', { p_slug: slug, p_user_id: user?.id || null })
+      if (error) throw error
+      setSlugValidation({ checking: false, available: data.available, reason: data.available ? null : data.reason })
+    } catch {
+      setSlugValidation({ checking: false, available: null, reason: 'Erro ao verificar' })
+    }
+  }, [user?.id])
+
+  const handleSlugChange = (value: string) => {
+    const normalized = value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30)
+    setLojaSlug(normalized)
+    if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current)
+    slugDebounceRef.current = setTimeout(() => validateSlug(normalized), 500)
+  }
+
+  // Upload de imagem
+  const uploadStoreImage = async (file: File, type: 'banner' | 'logo'): Promise<string | null> => {
+    if (!user) return null
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const fileName = `lojas/${user.id}/${type}-${Date.now()}.${fileExt}`
+
+      // Deleta antiga
+      const oldUrl = type === 'banner' ? bannerUrl : avatarUrl
+      if (oldUrl) {
+        const oldPath = oldUrl.split('/equipamentos/')[1]
+        if (oldPath) await supabase.storage.from('equipamentos').remove([oldPath])
+      }
+
+      const { error } = await supabase.storage.from('equipamentos').upload(fileName, file, { cacheControl: '3600', upsert: true })
+      if (error) throw error
+
+      return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/equipamentos/${fileName}`
+    } catch (err) {
+      console.error('Erro upload:', err)
+      return null
+    }
+  }
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingBanner(true)
+    const url = await uploadStoreImage(file, 'banner')
+    if (url) setBannerUrl(url)
+    setUploadingBanner(false)
+    e.target.value = ''
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingLogo(true)
+    const url = await uploadStoreImage(file, 'logo')
+    if (url) setAvatarUrl(url)
+    setUploadingLogo(false)
+    e.target.value = ''
+  }
+
+  // Salvar
+  const handleSave = async () => {
+    if (!user) return
+    if (lojaSlug && !slugValidation.available && lojaSlug !== profile?.loja_slug) {
+      return
+    }
+
+    setSaving(true)
+    try {
+      const updateData: Record<string, unknown> = {
+        banner_url: bannerUrl,
+        avatar_url: avatarUrl,
+        cor_marca: corMarca,
+        bio: bio || null
+      }
+      if (lojaSlug !== (profile?.loja_slug || '')) {
+        updateData.loja_slug = lojaSlug || null
+      }
+
+      const { error } = await supabase.from('profiles').update(updateData).eq('id', user.id)
+      if (error) throw error
+
+      await recarregarProfile()
+      // Toast seria ideal aqui
+    } catch (err) {
+      console.error('Erro ao salvar:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const nomeExibicao = profile?.nome_empresa || profile?.full_name || 'Minha Loja'
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Formulario */}
+        <div className="space-y-4">
+          {/* Banner */}
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <ImagePlus size={16} className="text-indigo-600 dark:text-indigo-400" />
+              Banner de Capa
+            </h3>
+            <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+            <div
+              onClick={() => bannerInputRef.current?.click()}
+              className="h-32 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 transition-all overflow-hidden relative group"
+            >
+              {bannerUrl ? (
+                <>
+                  <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="text-white text-xs font-medium">Alterar</span>
+                  </div>
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                  {uploadingBanner ? <Loader2 className="animate-spin" size={20} /> : <><ImagePlus size={20} /><span className="text-xs mt-1">1200x300 px</span></>}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Logo */}
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <Store size={16} className="text-indigo-600 dark:text-indigo-400" />
+              Logo da Empresa
+            </h3>
+            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+            <div
+              onClick={() => logoInputRef.current?.click()}
+              className="w-24 h-24 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-full cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 transition-all overflow-hidden relative group"
+            >
+              {avatarUrl ? (
+                <>
+                  <img src={avatarUrl} alt="Logo" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="text-white text-[10px] font-medium">Alterar</span>
+                  </div>
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                  {uploadingLogo ? <Loader2 className="animate-spin" size={18} /> : <Store size={18} />}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Cor da Marca */}
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Cor da Marca</h3>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={corMarca}
+                onChange={(e) => setCorMarca(e.target.value)}
+                className="w-12 h-12 rounded-xl cursor-pointer border border-gray-200 dark:border-neutral-700"
+              />
+              <input
+                type="text"
+                value={corMarca}
+                onChange={(e) => /^#[0-9A-Fa-f]{0,6}$/.test(e.target.value) && setCorMarca(e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl text-sm font-mono outline-none"
+              />
+            </div>
+          </div>
+
+          {/* URL Personalizada */}
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">URL Personalizada</h3>
+            <div className="flex items-center">
+              <span className="px-3 py-2 bg-gray-100 dark:bg-neutral-800 border border-r-0 border-gray-200 dark:border-neutral-700 rounded-l-xl text-xs text-slate-500 font-mono">
+                /loja/
+              </span>
+              <input
+                type="text"
+                value={lojaSlug}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-r-xl text-sm font-mono outline-none"
+                placeholder="minha-empresa"
+                maxLength={30}
+              />
+            </div>
+            {lojaSlug && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs">
+                {slugValidation.checking ? (
+                  <><Loader2 size={12} className="animate-spin text-slate-400" /><span className="text-slate-400">Verificando...</span></>
+                ) : slugValidation.available === true ? (
+                  <><CheckCircle2 size={12} className="text-emerald-500" /><span className="text-emerald-600 font-medium">Disponivel</span></>
+                ) : slugValidation.available === false ? (
+                  <><X size={12} className="text-red-500" /><span className="text-red-600 font-medium">{slugValidation.reason}</span></>
+                ) : slugValidation.reason ? (
+                  <span className="text-amber-600">{slugValidation.reason}</span>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {/* Bio */}
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Slogan / Bio</h3>
+            <div className="relative">
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value.slice(0, 200))}
+                rows={3}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl text-sm outline-none resize-none"
+                placeholder="Descreva sua empresa..."
+              />
+              <span className="absolute bottom-2 right-2 text-[10px] text-slate-400">{bio.length}/200</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="xl:sticky xl:top-8 xl:self-start">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Preview</h3>
+            <span className="text-[10px] text-slate-500 bg-gray-100 dark:bg-neutral-800 px-2 py-0.5 rounded-full">Ao vivo</span>
+          </div>
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-100 dark:border-neutral-800 overflow-hidden shadow-sm">
+            {/* Banner Preview */}
+            <div
+              className="h-28 relative"
+              style={{ background: bannerUrl ? `url(${bannerUrl}) center/cover` : `linear-gradient(135deg, ${corMarca}40, ${corMarca}80)` }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30" />
+            </div>
+            {/* Avatar Preview */}
+            <div className="relative px-4 -mt-8">
+              <div className="w-16 h-16 rounded-xl border-4 border-white dark:border-neutral-900 shadow-lg overflow-hidden" style={{ backgroundColor: corMarca }}>
+                {avatarUrl ? <img src={avatarUrl} alt="Logo" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Store className="w-6 h-6 text-white" /></div>}
+              </div>
+            </div>
+            <div className="p-4 pt-2">
+              <h4 className="font-bold text-slate-900 dark:text-white">{nomeExibicao}</h4>
+              {lojaSlug && <p className="text-[10px] text-slate-400 font-mono">/loja/{lojaSlug}</p>}
+              {bio && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{bio}</p>}
+              <button className="mt-3 w-full py-2 rounded-lg text-white text-xs font-bold" style={{ backgroundColor: corMarca }}>
+                Botao Exemplo
+              </button>
+            </div>
+          </div>
+
+          {/* Acoes */}
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={handleSave}
+              disabled={saving || uploadingBanner || uploadingLogo}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-900 dark:bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-600 dark:hover:bg-indigo-500 disabled:opacity-50 transition-all shadow-lg"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+              Salvar
+            </button>
+            {(profile?.loja_slug || lojaSlug) && (
+              <a
+                href={`/loja/${profile?.loja_slug || lojaSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-3 border-2 border-gray-200 dark:border-neutral-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:border-indigo-300 dark:hover:border-indigo-700 transition-all flex items-center gap-2"
+              >
+                Ver Loja
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ========== MAIN COMPONENT ==========
 export default function OwnerDashboard() {
   const { user, profile, signOut } = useAuth()
@@ -1138,7 +1455,9 @@ export default function OwnerDashboard() {
     deletarEquipamento,
     addEquipamento,
     atualizarEquipamento,
-    uploadImagens
+    uploadImagens,
+    uploadInspectionPhotos,
+    saveInspectionAndDispatch
   } = useApp()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1146,7 +1465,7 @@ export default function OwnerDashboard() {
 
   // Lê aba inicial da URL (ex: /dashboard?tab=fleet)
   const tabFromUrl = searchParams.get('tab') as TabKey | null
-  const validTabs: TabKey[] = ['overview', 'chat', 'fleet', 'finance', 'wallet', 'contracts', 'calendar']
+  const validTabs: TabKey[] = ['overview', 'chat', 'fleet', 'finance', 'wallet', 'contracts', 'calendar', 'store']
   const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'overview'
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab)
@@ -1164,7 +1483,8 @@ export default function OwnerDashboard() {
   const [confirmandoRetorno, setConfirmandoRetorno] = useState(false)
   const [equipamentoParaExcluir, setEquipamentoParaExcluir] = useState<Equipamento | null>(null)
   const [excluindo, setExcluindo] = useState(false)
-  const [despachoModal, setDespachoModal] = useState<{ propostaId: string; equipamentoId: string; equipamentoNome: string; clienteNome: string } | null>(null)
+  const [despachoModal, setDespachoModal] = useState<{ propostaId: string; equipamentoId: string; equipamentoNome: string; clienteNome: string; chatId?: string } | null>(null)
+  const [inspectionWizardOpen, setInspectionWizardOpen] = useState(false)
   const [showNovoModal, setShowNovoModal] = useState(false)
   const [submittingNovo, setSubmittingNovo] = useState(false)
   const [equipamentoEditando, setEquipamentoEditando] = useState<Equipamento | null>(null)
@@ -1482,9 +1802,71 @@ export default function OwnerDashboard() {
     }
   }
 
-  const abrirDespachoModal = (propostaId: string, equipamento: Equipamento, clienteNome: string) => {
-    setDespachoModal({ propostaId, equipamentoId: equipamento.id, equipamentoNome: equipamento.nome, clienteNome })
+  // Abre o wizard de vistoria para despachar equipamento
+  const abrirDespachoModal = async (propostaId: string, equipamento: Equipamento, clienteNome: string) => {
+    // Busca o chatId associado à proposta
+    const { data: chatData } = await supabase
+      .from('chats')
+      .select('id')
+      .eq('proposta_id', propostaId)
+      .single()
+
+    setDespachoModal({
+      propostaId,
+      equipamentoId: equipamento.id,
+      equipamentoNome: equipamento.nome,
+      clienteNome,
+      chatId: chatData?.id
+    })
+    setInspectionWizardOpen(true)
   }
+
+  // Callback quando a vistoria for completada no OwnerDashboard
+  const handleInspectionComplete = async (
+    photos: Map<InspectionPhotoPosition, File>,
+    avarias: string,
+    declaracaoAceita: boolean
+  ) => {
+    if (!despachoModal || !user) return
+
+    setDespachando(despachoModal.equipamentoId)
+    try {
+      // 1. Upload das fotos de inspeção
+      const uploadResult = await uploadInspectionPhotos(photos, user.id, despachoModal.propostaId)
+
+      if (uploadResult.error) {
+        console.error('Erro ao fazer upload das fotos:', uploadResult.error)
+        setDespachando(null)
+        return
+      }
+
+      // 2. Salva inspeção e despacha equipamento
+      const result = await saveInspectionAndDispatch(
+        despachoModal.propostaId,
+        despachoModal.equipamentoId,
+        despachoModal.chatId || '',
+        {
+          photos: uploadResult.photos,
+          avarias,
+          declaracaoAceita
+        }
+      )
+
+      if (result.success) {
+        setInspectionWizardOpen(false)
+        setDespachoModal(null)
+        reloadData()
+      } else {
+        console.error('Erro ao despachar:', result.error)
+      }
+    } catch (err) {
+      console.error('Erro inesperado ao despachar:', err)
+    } finally {
+      setDespachando(null)
+    }
+  }
+
+  // Mantém compatibilidade com o modal antigo (caso precise voltar atrás)
   const handleDespacharConfirmado = async () => {
     if (!despachoModal) return
     setDespachando(despachoModal.equipamentoId)
@@ -1554,6 +1936,8 @@ export default function OwnerDashboard() {
     { key: 'wallet', icon: Wallet, label: 'Carteira' },
     { key: 'contracts', icon: FileText, label: 'Contratos' },
     { key: 'calendar', icon: Calendar, label: 'Calendário' },
+    // Minha Loja - só aparece se tem_loja === true
+    ...(profile?.tem_loja ? [{ key: 'store' as TabKey, icon: Store, label: 'Minha Loja' }] : []),
   ]
 
   const nomeEmpresa = profile?.nome_empresa || profile?.full_name || 'Parceiro'
@@ -2297,6 +2681,11 @@ export default function OwnerDashboard() {
                 }}
               />
             )}
+
+            {/* ===== MINHA LOJA ===== */}
+            {activeTab === 'store' && profile?.tem_loja && (
+              <StoreSettingsTab />
+            )}
           </>
         )}
       </main>
@@ -2325,13 +2714,16 @@ export default function OwnerDashboard() {
         equipamentoNome={equipamentoParaExcluir?.nome || ''}
         loading={excluindo}
       />
-      <ConfirmarDespachoModal
-        isOpen={!!despachoModal}
-        onClose={() => setDespachoModal(null)}
-        onConfirmar={handleDespacharConfirmado}
-        equipamentoNome={despachoModal?.equipamentoNome || ''}
-        clienteNome={despachoModal?.clienteNome || ''}
+      {/* Wizard de Vistoria Digital (Súmula 492) */}
+      <InspectionWizard
+        isOpen={inspectionWizardOpen}
+        onClose={() => {
+          setInspectionWizardOpen(false)
+          setDespachoModal(null)
+        }}
+        onComplete={handleInspectionComplete}
         loading={despachando === despachoModal?.equipamentoId}
+        equipamentoNome={despachoModal?.equipamentoNome || 'Equipamento'}
       />
     </div>
   )

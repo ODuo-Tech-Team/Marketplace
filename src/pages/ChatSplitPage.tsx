@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth, type Profile } from '../contexts/AuthContext'
-import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, ESTADOS_BR, isLinhaAmarela } from '../contexts/AppContext'
+import { useApp, type Mensagem, type Chat, type Proposta, type EnderecoEntrega, type ArquivoChat, ESTADOS_BR, isLinhaAmarela } from '../contexts/AppContext'
 import { PropostaRecebidaCard } from '../components/chat/PropostaRecebidaCard'
 import ReviewCard from '../components/chat/ReviewCard'
 import { supabase } from '../lib/supabase'
@@ -17,6 +17,7 @@ import { ChatStatusBar } from '../components/chat/ChatStatusBar'
 import TraktoLogo from '../components/TraktoLogo'
 import { ContractGeneratorModal } from '../components/ContractGeneratorModal'
 import { mapContextToContractData } from '../utils/contractDataMapper'
+import { FileAttachment } from '../components/chat/FileAttachment'
 
 function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null
@@ -821,7 +822,9 @@ export default function ChatSplitPage() {
     fetchChat,
     enviarProposta,
     responderProposta,
-    marcarMensagensComoLidas
+    marcarMensagensComoLidas,
+    uploadArquivoChat,
+    enviarMensagemComArquivo
   } = useApp()
 
   const [chats, setChats] = useState<Chat[]>([])
@@ -847,6 +850,8 @@ export default function ChatSplitPage() {
   const [notificacaoLocadorOpen, setNotificacaoLocadorOpen] = useState(false)
   const [erroEnvio, setErroEnvio] = useState<string | null>(null)
   const [chatNotFound, setChatNotFound] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
@@ -1078,6 +1083,71 @@ export default function ChatSplitPage() {
   const handleRetryEnvio = () => {
     setErroEnvio(null)
     // A mensagem ainda está no input, usuário pode enviar novamente
+  }
+
+  // Função para upload de arquivo no chat
+  const handleFileUpload = async (file: File) => {
+    if (!chatId || !user) return
+
+    // Validacao de tipo
+    const tiposPermitidos = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]
+
+    if (!tiposPermitidos.includes(file.type)) {
+      setErroEnvio('Tipo de arquivo nao permitido. Use PDF, imagens ou documentos Word.')
+      return
+    }
+
+    // Validacao de tamanho (10MB)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      setErroEnvio('Arquivo muito grande. Maximo permitido: 10MB')
+      return
+    }
+
+    setUploadingFile(true)
+    setUploadProgress(`Enviando ${file.name}...`)
+    setErroEnvio(null)
+
+    try {
+      // 1. Faz upload do arquivo
+      const uploadResult = await uploadArquivoChat(file, chatId, user.id)
+
+      if (uploadResult.error || !uploadResult.arquivo) {
+        setErroEnvio(uploadResult.error || 'Erro ao fazer upload do arquivo')
+        setUploadingFile(false)
+        setUploadProgress(null)
+        return
+      }
+
+      // 2. Envia mensagem com o arquivo anexado
+      const mensagemResult = await enviarMensagemComArquivo(
+        chatId,
+        user.id,
+        uploadResult.arquivo,
+        `Arquivo: ${file.name}`
+      )
+
+      if (mensagemResult.success) {
+        await carregarMensagens(chatId)
+        marcarMensagensComoLidas(chatId, user.id)
+      } else {
+        setErroEnvio(mensagemResult.error || 'Erro ao enviar mensagem com arquivo')
+      }
+    } catch (err) {
+      console.error('Erro no upload de arquivo:', err)
+      setErroEnvio('Erro inesperado ao enviar arquivo')
+    } finally {
+      setUploadingFile(false)
+      setUploadProgress(null)
+    }
   }
 
   const handleEnviarProposta = async (dados: {
@@ -1455,6 +1525,7 @@ export default function ChatSplitPage() {
                         </div>
                         {msgs.map((msg) => {
                           const isMe = normalizeId(msg.sender_id) === userId
+                          const hasFile = msg.arquivo_url && msg.arquivo_nome && msg.arquivo_tipo
 
                           return (
                             <div key={msg.id} className={`flex mb-3 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1463,7 +1534,20 @@ export default function ChatSplitPage() {
                                   ? 'bg-bubble-me text-bubble-me-text rounded-2xl rounded-tr-sm shadow-md'
                                   : 'bg-bubble-other text-bubble-other-text rounded-2xl rounded-tl-sm border border-border-subtle shadow-sm'
                               }`}>
-                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.texto}</p>
+                                {/* Texto da mensagem (oculta se for apenas arquivo) */}
+                                {(!hasFile || !msg.texto.startsWith('Arquivo:')) && (
+                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.texto}</p>
+                                )}
+                                {/* Arquivo anexado */}
+                                {hasFile && (
+                                  <FileAttachment
+                                    arquivoUrl={msg.arquivo_url!}
+                                    arquivoNome={msg.arquivo_nome!}
+                                    arquivoTipo={msg.arquivo_tipo!}
+                                    arquivoTamanho={msg.arquivo_tamanho || undefined}
+                                    isOwn={isMe}
+                                  />
+                                )}
                                 <p className={`text-[10px] mt-1.5 ${isMe ? 'text-foreground-secondary text-right' : 'text-foreground-muted'}`}>{formatarHora(msg.created_at)}</p>
                               </div>
                             </div>
@@ -1495,19 +1579,28 @@ export default function ChatSplitPage() {
                         id="chat-file-upload"
                         accept="image/*,.pdf,.doc,.docx"
                         className="hidden"
+                        disabled={uploadingFile || enviando}
                         onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (file) {
-                            // TODO: implementar upload de arquivo
-                            console.log('Arquivo selecionado:', file.name)
+                            handleFileUpload(file)
+                            // Limpa o input para permitir enviar o mesmo arquivo novamente
+                            e.target.value = ''
                           }
                         }}
                       />
                       <label
                         htmlFor="chat-file-upload"
-                        className="p-1.5 md:p-2 hover:bg-glass-hover rounded-xl text-foreground-muted transition-colors cursor-pointer"
+                        className={`p-1.5 md:p-2 hover:bg-glass-hover rounded-xl transition-colors ${
+                          uploadingFile ? 'text-cta animate-pulse cursor-wait' : 'text-foreground-muted cursor-pointer'
+                        }`}
+                        title={uploadingFile ? 'Enviando arquivo...' : 'Anexar arquivo (PDF, imagem, documento)'}
                       >
-                        <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                        {uploadingFile ? (
+                          <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                        ) : (
+                          <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                        )}
                       </label>
                       <div className="w-px h-5 md:h-6 bg-border mx-0.5 md:mx-1" />
                       <input
@@ -1528,6 +1621,14 @@ export default function ChatSplitPage() {
                       </button>
                     </div>
                   </form>
+
+                  {/* Indicador de upload de arquivo */}
+                  {uploadProgress && (
+                    <div className="w-full mt-2 px-4 py-2 bg-cta/10 border border-cta/30 rounded-xl flex items-center justify-center gap-2 text-cta text-sm font-medium">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{uploadProgress}</span>
+                    </div>
+                  )}
 
                   {/* Erro de envio - feedback visual */}
                   {erroEnvio && (

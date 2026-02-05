@@ -79,6 +79,7 @@ interface Usuario {
   tipo_usuario: 'locador' | 'locatario'
   verificado: boolean
   destacado: boolean  // Locador PRO (pagou pelo destaque)
+  tem_loja: boolean   // Loja/vitrine ativa (monetizacao)
   solicitou_reset: boolean
   created_at: string
 }
@@ -154,6 +155,7 @@ export default function Adm() {
   const [excluindoUsuario, setExcluindoUsuario] = useState<string | null>(null)
   const [alternandoVerificado, setAlternandoVerificado] = useState<string | null>(null)
   const [alternandoDestacado, setAlternandoDestacado] = useState<string | null>(null)
+  const [alternandoTemLoja, setAlternandoTemLoja] = useState<string | null>(null)
   const [sucessoUsuario, setSucessoUsuario] = useState<string | null>(null)
 
   // Estados para modal de reset de senha
@@ -187,7 +189,7 @@ export default function Adm() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, nome_empresa, tipo_usuario, verificado, destacado, solicitou_reset, created_at')
+        .select('id, email, full_name, nome_empresa, tipo_usuario, verificado, destacado, tem_loja, solicitou_reset, created_at')
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -204,6 +206,7 @@ export default function Adm() {
         tipo_usuario: u.tipo_usuario || 'locatario',
         verificado: u.verificado || false,
         destacado: u.destacado || false,
+        tem_loja: u.tem_loja || false,
         solicitou_reset: u.solicitou_reset || false,
         created_at: u.created_at
       }))
@@ -308,6 +311,39 @@ export default function Adm() {
       setError('Erro inesperado ao alterar destaque')
     } finally {
       setAlternandoDestacado(null)
+    }
+  }
+
+  // Alterna o status de tem_loja (monetizacao vitrine) do locador
+  const toggleTemLoja = async (usuario: Usuario) => {
+    setAlternandoTemLoja(usuario.id)
+    try {
+      const novoStatus = !usuario.tem_loja
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ tem_loja: novoStatus })
+        .eq('id', usuario.id)
+
+      if (error) {
+        console.error('[Adm] Erro ao alterar status da loja:', error)
+        setError(`Erro ao alterar loja: ${error.message}`)
+        return
+      }
+
+      // Atualiza localmente
+      setUsuarios(prev => prev.map(u =>
+        u.id === usuario.id ? { ...u, tem_loja: novoStatus } : u
+      ))
+
+      setSucessoUsuario(`Loja de ${usuario.nome} ${novoStatus ? 'ATIVADA' : 'DESATIVADA'} com sucesso!`)
+      setTimeout(() => setSucessoUsuario(null), 3000)
+
+    } catch (err) {
+      console.error('[Adm] Erro ao alterar status da loja:', err)
+      setError('Erro inesperado ao alterar status da loja')
+    } finally {
+      setAlternandoTemLoja(null)
     }
   }
 
@@ -1502,6 +1538,7 @@ export default function Adm() {
                     <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Tipo</th>
                     <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Verificado</th>
                     <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">PRO</th>
+                    <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Loja Ativa</th>
                     <th className="text-center text-foreground-secondary font-semibold px-4 py-4 text-sm">Status</th>
                     <th className="text-right text-foreground-secondary font-semibold px-6 py-4 text-sm">Ações</th>
                   </tr>
@@ -1611,6 +1648,35 @@ export default function Adm() {
                             )}
                             <span className="text-xs font-medium">
                               {usuario.destacado ? 'PRO' : 'Ativar'}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-foreground-muted text-xs">N/A</span>
+                        )}
+                      </td>
+
+                      {/* Coluna: Loja Ativa (Monetizacao Vitrine) */}
+                      <td className="px-4 py-4 text-center">
+                        {usuario.tipo_usuario === 'locador' ? (
+                          <button
+                            onClick={() => toggleTemLoja(usuario)}
+                            disabled={alternandoTemLoja === usuario.id}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                              usuario.tem_loja
+                                ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                                : 'bg-surface-elevated text-foreground-secondary hover:bg-glass-hover'
+                            }`}
+                            title={usuario.tem_loja ? 'Desativar loja/vitrine' : 'Ativar loja/vitrine'}
+                          >
+                            {alternandoTemLoja === usuario.id ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : usuario.tem_loja ? (
+                              <ToggleRight className="w-6 h-6" />
+                            ) : (
+                              <ToggleLeft className="w-6 h-6" />
+                            )}
+                            <span className="text-xs font-medium">
+                              {usuario.tem_loja ? 'Ativa' : 'Inativa'}
                             </span>
                           </button>
                         ) : (
