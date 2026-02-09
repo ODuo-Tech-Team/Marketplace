@@ -9,12 +9,12 @@ export interface Profile {
   avatar_url: string | null
   role: 'customer' | 'chef' | 'admin'
   created_at: string
-  // Tipo de usuário para redirecionamento inteligente
+  // Tipo de usuario para redirecionamento inteligente
   tipo_usuario?: 'locador' | 'locatario' | null
-  // Dados da empresa/locadora (escalabilidade para múltiplas locadoras)
+  // Dados da empresa/locadora (escalabilidade para multiplas locadoras)
   nome_empresa?: string | null
   razao_social?: string | null
-  // Campos de endereço para entrega
+  // Campos de endereco para entrega
   cep?: string | null
   rua?: string | null
   numero?: string | null
@@ -22,12 +22,27 @@ export interface Profile {
   bairro?: string | null
   cidade?: string | null
   uf?: string | null
-  // Flag para senha temporária (reset feito pelo admin)
+  // Flag para senha temporaria (reset feito pelo admin)
   senha_temporaria?: boolean
   // Onboarding fields
   document_id?: string | null
   whatsapp?: string | null
   website_instagram?: string | null
+  // Storefront fields
+  banner_url?: string | null
+  bio?: string | null
+  followers_count?: number | null
+  vertical_principal?: string | null
+  // Selos e rating
+  verificado?: boolean | null
+  destacado?: boolean | null
+  rating_average?: number | null
+  reviews_count?: number | null
+  // Monetizacao: controle de acesso a loja/vitrine
+  tem_loja?: boolean | null
+  // Personalizacao de loja
+  cor_marca?: string | null
+  loja_slug?: string | null
 }
 
 interface AuthContextType {

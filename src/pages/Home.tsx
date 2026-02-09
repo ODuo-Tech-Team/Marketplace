@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, createElement } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Loader2, Package, ChevronLeft, ChevronRight, LayoutGrid, Star, Search, Sun, Moon } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Loader2, Package, ChevronLeft, ChevronRight, LayoutGrid, Star, Search, Sun, Moon, Store, MapPin, ShieldCheck, Award } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, isEquipamentoDisponivel } from '../contexts/AppContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -43,6 +44,19 @@ function MobileClientHeader() {
   )
 }
 
+// Interface para Lojas Oficiais/Parceiros
+interface LojaOficial {
+  id: string
+  nome_empresa: string | null
+  full_name: string | null
+  avatar_url: string | null
+  banner_url: string | null
+  cidade: string | null
+  uf: string | null
+  verificado: boolean
+  destacado: boolean
+}
+
 // ========== VISAO DO LOCATARIO (LOVABLE MARKETPLACE) ==========
 function RenterView() {
   const navigate = useNavigate()
@@ -62,6 +76,11 @@ function RenterView() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
+
+  // Estado para Lojas Oficiais
+  const [lojasOficiais, setLojasOficiais] = useState<LojaOficial[]>([])
+  const [loadingLojas, setLoadingLojas] = useState(true)
+  const lojasScrollRef = useRef<HTMLDivElement>(null)
 
   const checkScroll = useCallback(() => {
     const el = scrollRef.current
@@ -94,6 +113,35 @@ function RenterView() {
       setupMensagensRealtime(user.id)
     }
   }, [user?.id])
+
+  // Buscar Lojas Oficiais (locadores com tem_loja = true)
+  useEffect(() => {
+    const fetchLojasOficiais = async () => {
+      setLoadingLojas(true)
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, nome_empresa, full_name, avatar_url, banner_url, cidade, uf, verificado, destacado')
+          .eq('tipo_usuario', 'locador')
+          .eq('tem_loja', true)
+          .order('destacado', { ascending: false })
+          .order('verificado', { ascending: false })
+          .limit(12)
+
+        if (error) {
+          setLojasOficiais([])
+        } else {
+          setLojasOficiais(data || [])
+        }
+      } catch {
+        setLojasOficiais([])
+      } finally {
+        setLoadingLojas(false)
+      }
+    }
+
+    fetchLojasOficiais()
+  }, [])
 
   const equipamentosFiltrados = useMemo(() => {
     return equipamentos
@@ -255,24 +303,175 @@ function RenterView() {
                 placeholder="Buscar equipamentos..."
                 className="flex-1 px-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-600 outline-none bg-transparent"
               />
-              <button className="h-full px-4 bg-slate-900 dark:bg-indigo-600">
+              <button
+                onClick={() => document.getElementById('ofertas-section')?.scrollIntoView({ behavior: 'smooth' })}
+                className="h-full px-4 bg-slate-900 dark:bg-indigo-600"
+              >
                 <Search size={18} className="text-white" strokeWidth={2.5} />
               </button>
             </div>
 
             {/* Desktop: Botão Explorar Ofertas */}
-            <button className="hidden lg:block mx-auto bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98]">
+            <button
+              onClick={() => document.getElementById('ofertas-section')?.scrollIntoView({ behavior: 'smooth' })}
+              className="hidden lg:block mx-auto bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98]"
+            >
               Explorar Ofertas
             </button>
           </div>
         </div>
       </section>
 
+      {/* ========== SECAO: LOJAS OFICIAIS & PARCEIROS ========== */}
+      {!loadingLojas && lojasOficiais.length > 0 && (
+        <section className="max-w-[1600px] mx-auto px-4 md:px-6 mb-8 lg:mb-12">
+          <div className="flex items-center justify-between mb-4 lg:mb-6">
+            <div className="flex items-center gap-2 lg:gap-3">
+              <div className="w-1 h-5 lg:h-6 bg-gradient-to-b from-emerald-500 to-teal-600 rounded-full" />
+              <h2 className="text-base lg:text-xl font-bold text-slate-900 dark:text-white">Lojas Oficiais & Parceiros</h2>
+            </div>
+          </div>
+
+          {/* Mobile: Scroll Horizontal */}
+          <div className="lg:hidden overflow-hidden">
+            <div
+              ref={lojasScrollRef}
+              className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory"
+            >
+              {lojasOficiais.map((loja) => {
+                const nomeExibicao = loja.nome_empresa || loja.full_name || 'Loja'
+                const localizacao = [loja.cidade, loja.uf].filter(Boolean).join(', ') || 'Brasil'
+                const inicial = nomeExibicao.charAt(0).toUpperCase()
+
+                return (
+                  <Link
+                    key={loja.id}
+                    to={`/loja/${loja.id}`}
+                    className="flex-shrink-0 w-64 snap-start group"
+                  >
+                    <div className="relative h-32 rounded-t-2xl overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600">
+                      {loja.banner_url ? (
+                        <img
+                          src={loja.banner_url}
+                          alt={nomeExibicao}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500" />
+                      )}
+                      <div className="absolute inset-0 bg-black/20" />
+                    </div>
+                    <div className="bg-white dark:bg-neutral-900 rounded-b-2xl p-4 border border-t-0 border-gray-100 dark:border-white/10 -mt-6 relative z-10 shadow-lg">
+                      <div className="flex items-start gap-3 -mt-10">
+                        <div className="w-14 h-14 rounded-xl bg-white dark:bg-neutral-800 border-2 border-white dark:border-neutral-700 shadow-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {loja.avatar_url ? (
+                            <img src={loja.avatar_url} alt={nomeExibicao} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{inicial}</span>
+                          )}
+                        </div>
+                        <div className="pt-8 min-w-0">
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {nomeExibicao}
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+                            <MapPin size={10} /> {localizacao}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3">
+                        {loja.verificado && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full">
+                            <ShieldCheck size={10} /> Verificado
+                          </span>
+                        )}
+                        {loja.destacado && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full">
+                            <Award size={10} /> PRO
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Desktop: Grid */}
+          <div className="hidden lg:grid lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6">
+            {lojasOficiais.map((loja) => {
+              const nomeExibicao = loja.nome_empresa || loja.full_name || 'Loja'
+              const localizacao = [loja.cidade, loja.uf].filter(Boolean).join(', ') || 'Brasil'
+              const inicial = nomeExibicao.charAt(0).toUpperCase()
+
+              return (
+                <Link
+                  key={loja.id}
+                  to={`/loja/${loja.id}`}
+                  className="group"
+                >
+                  <div className="relative h-28 rounded-t-2xl overflow-hidden">
+                    {loja.banner_url ? (
+                      <img
+                        src={loja.banner_url}
+                        alt={nomeExibicao}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500" />
+                    )}
+                    <div className="absolute inset-0 bg-black/20" />
+                  </div>
+                  <div className="bg-white dark:bg-neutral-900 rounded-b-2xl p-4 border border-t-0 border-gray-100 dark:border-white/10 -mt-6 relative z-10 shadow-lg group-hover:shadow-xl group-hover:border-indigo-200 dark:group-hover:border-indigo-800 transition-all">
+                    <div className="flex items-start gap-3 -mt-10">
+                      <div className="w-12 h-12 rounded-xl bg-white dark:bg-neutral-800 border-2 border-white dark:border-neutral-700 shadow-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {loja.avatar_url ? (
+                          <img src={loja.avatar_url} alt={nomeExibicao} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{inicial}</span>
+                        )}
+                      </div>
+                      <div className="pt-6 min-w-0">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          {nomeExibicao}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+                          <MapPin size={10} /> {localizacao}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                      {loja.verificado && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full">
+                          <ShieldCheck size={10} /> Verificado
+                        </span>
+                      )}
+                      {loja.destacado && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full">
+                          <Award size={10} /> PRO
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Categorias Horizontal - MOBILE ONLY */}
-      <div className="lg:hidden px-4 mb-6">
+      <div className="lg:hidden px-4 mb-6 overflow-hidden">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white dark:text-white font-semibold text-base">Categorias</h3>
-          <button className="text-purple-400 dark:text-purple-400 text-xs font-medium">Ver tudo</button>
+          <h3 className="text-slate-900 dark:text-white font-semibold text-base">Categorias</h3>
+          <button
+            className="text-purple-600 dark:text-purple-400 text-xs font-medium"
+            onClick={() => {
+              const el = document.getElementById('categorias-section')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }}
+          >Ver tudo</button>
         </div>
 
         <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
@@ -323,7 +522,42 @@ function RenterView() {
         </div>
       </div>
 
+      {/* CTA Banner - Para usuários NÃO LOGADOS */}
+      {!user && (
+        <div className="max-w-4xl mx-auto px-4 mb-8">
+          <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 rounded-3xl p-6 md:p-8 text-white text-center relative overflow-hidden">
+            {/* Glow decorativo */}
+            <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/20 rounded-full blur-[80px] pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-400/30 rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="relative z-10">
+              <h2 className="text-2xl md:text-3xl font-extrabold mb-3 tracking-tight">
+                Alugue equipamentos sem burocracia
+              </h2>
+              <p className="text-white/80 mb-6 max-w-lg mx-auto text-sm md:text-base">
+                Crie sua conta gratuita e comece a negociar diretamente com locadores verificados em todo o Brasil.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => navigate('/auth', { state: { mode: 'signup' } })}
+                  className="bg-white text-indigo-600 hover:bg-indigo-50 px-8 py-3 rounded-xl font-bold shadow-lg hover:shadow-white/20 transition-all hover:scale-[1.02] active:scale-95"
+                >
+                  Criar Conta Grátis
+                </button>
+                <button
+                  onClick={() => navigate('/auth', { state: { mode: 'login' } })}
+                  className="border-2 border-white/30 text-white hover:bg-white/10 px-8 py-3 rounded-xl font-bold transition-all"
+                >
+                  Já tenho conta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content Area */}
+      <div id="ofertas-section" />
       {loadingEquipamentos ? (
         <div className="flex items-center justify-center py-24">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
@@ -346,9 +580,6 @@ function RenterView() {
                   <div className="w-1 h-5 lg:h-6 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-full" />
                   <h2 className="text-base lg:text-xl font-bold text-slate-900 dark:text-white">Destaques da Semana</h2>
                 </div>
-                <button className="text-xs lg:text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors">
-                  Ver tudo
-                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
@@ -371,9 +602,6 @@ function RenterView() {
                   <div className="w-1 h-5 lg:h-6 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-full" />
                   <h2 className="text-base lg:text-xl font-bold text-slate-900 dark:text-white">Disponíveis para Locação</h2>
                 </div>
-                <button className="text-xs lg:text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors">
-                  Ver tudo
-                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">

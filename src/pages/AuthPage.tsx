@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import {
   Building2, User, Phone, MapPin, Mail, Lock, Globe,
   CheckCircle2, ChevronRight, ArrowLeft, Loader2,
@@ -27,9 +28,25 @@ type ViewState =
 
 export default function AuthPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { recarregarProfile } = useAuth()
 
   // Navigation
   const [view, setView] = useState<ViewState>('decision')
+
+  // Handle mode from navigation state (from LoginModal/Header)
+  useEffect(() => {
+    const state = location.state as { mode?: 'login' | 'signup' } | null
+    if (state?.mode === 'login') {
+      setView('login')
+    } else if (state?.mode === 'signup') {
+      setView('decision')
+    }
+    // Clear the state to prevent re-triggering on refresh
+    if (state?.mode) {
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
   const [flowType, setFlowType] = useState<FlowType>(null)
 
   // Shared fields
@@ -264,6 +281,26 @@ export default function AuthPage() {
         return
       }
 
+      // Verifica se o usuário é admin para redirecionar corretamente
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (profile?.role === 'admin') {
+          // Aguarda o AuthContext atualizar o profile antes de navegar
+          // Isso evita que o AdminGuard redirecione de volta para Home
+          await recarregarProfile()
+          navigate('/admLoca')
+          return
+        }
+      }
+
+      // Para usuários não-admin, também recarrega o profile para garantir sincronização
+      await recarregarProfile()
       navigate('/')
     } catch {
       setError('Erro inesperado. Tente novamente.')
@@ -357,7 +394,7 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#0a0a0a] flex items-center justify-center p-4 font-sans text-foreground">
-      <div className="w-full max-w-5xl bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl shadow-indigo-500/5 overflow-hidden flex flex-col md:flex-row min-h-[650px] border border-gray-100 dark:border-neutral-800">
+      <div className="w-full max-w-5xl bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl shadow-indigo-500/5 overflow-hidden flex flex-col md:flex-row min-h-[500px] sm:min-h-[650px] border border-gray-100 dark:border-neutral-800">
 
         {/* ========== SIDEBAR ========== */}
         <div className="hidden md:flex w-1/3 bg-gray-50 dark:bg-neutral-800 p-10 flex-col justify-between relative overflow-hidden transition-all duration-500">
@@ -379,7 +416,7 @@ export default function AuthPage() {
             {renderSidebarSteps()}
           </div>
 
-          <p className="text-slate-400 dark:text-slate-500 text-xs relative z-10">&copy; 2025 Trakto Inc.</p>
+          <p className="text-slate-400 dark:text-slate-500 text-xs relative z-10">&copy; 2026 Trakto Inc.</p>
         </div>
 
         {/* ========== FORM AREA ========== */}
@@ -467,6 +504,8 @@ export default function AuthPage() {
                   value={email}
                   onChange={setEmail}
                   ringColor="focus-within:ring-indigo-500"
+                  name="email"
+                  autoComplete="email"
                 />
                 <InputField
                   icon={<Lock size={18} className="text-foreground-muted" />}
@@ -476,6 +515,8 @@ export default function AuthPage() {
                   value={password}
                   onChange={setPassword}
                   ringColor="focus-within:ring-indigo-500"
+                  name="password"
+                  autoComplete="current-password"
                 />
 
                 {error && <ErrorBanner message={error} />}
@@ -693,7 +734,7 @@ export default function AuthPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <InputField
                     icon={<User size={18} className="text-slate-400" />}
                     label="Seu Nome *"
@@ -754,7 +795,7 @@ export default function AuthPage() {
                 {/* Credenciais */}
                 <div className="pt-4 border-t border-gray-100 dark:border-neutral-700">
                   <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">Login</p>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex items-center gap-3 border border-gray-200 dark:border-neutral-700 rounded-xl p-3 focus-within:ring-2 focus-within:ring-indigo-500 bg-white dark:bg-neutral-900">
                       <Mail size={18} className="text-slate-400" />
                       <input
@@ -930,7 +971,7 @@ function StepIndicator({ step, label, currentStep, color }: {
   )
 }
 
-function InputField({ icon, label, type = 'text', placeholder, value, onChange, bgClass = 'bg-white dark:bg-neutral-900', ringColor = 'focus-within:ring-indigo-500' }: {
+function InputField({ icon, label, type = 'text', placeholder, value, onChange, bgClass = 'bg-white dark:bg-neutral-900', ringColor = 'focus-within:ring-indigo-500', name, autoComplete }: {
   icon: React.ReactNode
   label?: string
   type?: string
@@ -939,17 +980,24 @@ function InputField({ icon, label, type = 'text', placeholder, value, onChange, 
   onChange: (val: string) => void
   bgClass?: string
   ringColor?: string
+  name?: string
+  autoComplete?: string
 }) {
+  const inputId = name || label?.toLowerCase().replace(/[^a-z0-9]/g, '-') || undefined
   return (
     <div>
       {label && (
-        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">{label}</label>
+        <label htmlFor={inputId} className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1">{label}</label>
       )}
       <div className={`flex items-center gap-3 border border-gray-200 dark:border-neutral-700 rounded-xl p-3 focus-within:ring-2 ${ringColor} ${bgClass} ${label ? 'mt-1' : ''}`}>
         {icon}
         <input
+          id={inputId}
+          name={name || inputId}
           type={type}
           placeholder={placeholder}
+          autoComplete={autoComplete}
+          aria-label={label || placeholder}
           className="w-full bg-transparent outline-none font-bold text-slate-900 dark:text-white text-sm placeholder:text-slate-400"
           value={value}
           onChange={(e) => onChange(e.target.value)}

@@ -63,7 +63,7 @@ export default function BottomNav({ mensagensNaoLidas = 0, nomeUsuario = 'Usuár
             </div>
             <button
               onClick={() => setIsProfileMenuOpen(false)}
-              className="p-2 text-gray-400 hover:text-white transition-colors"
+              className="p-3 text-gray-400 hover:text-white transition-colors"
             >
               <X size={20} />
             </button>

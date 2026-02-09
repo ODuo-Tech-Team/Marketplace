@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Heart, ArrowRight, Star, MapPin, Crown, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Heart, ArrowRight, Star, MapPin, Crown, Sparkles, Store } from 'lucide-react'
 import FotosCarrossel from './FotosCarrossel'
-import { type Equipamento, isLinhaAmarela } from '../contexts/AppContext'
+import { type Equipamento, isLinhaAmarela, getLocadorDisplayName } from '../contexts/AppContext'
 import { TrustSealsRow } from './TrustSeal'
 import type { VerticalKey } from '../config/verticals'
 
@@ -124,6 +125,18 @@ export default function PremiumProductCard({
           </div>
         )}
 
+        {/* Locador com link para loja */}
+        {getLocadorDisplayName(equipamento) && (
+          <Link
+            to={`/loja/${equipamento.locador_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-slate-600 dark:text-slate-400 text-sm mb-1 flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors w-fit"
+          >
+            <Store size={13} />
+            <span className="truncate max-w-[200px] font-medium">{getLocadorDisplayName(equipamento)}</span>
+          </Link>
+        )}
+
         {/* Location */}
         {(equipamento.cidade || equipamento.uf) && (
           <div className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 mb-2">
@@ -152,19 +165,19 @@ export default function PremiumProductCard({
 
         {/* Footer */}
         <div className="mt-auto pt-4 border-t border-gray-100 dark:border-neutral-800">
-          <div className="flex items-end justify-between gap-4">
+          <div className="flex items-end justify-between gap-4 min-w-0">
             <div>
               <span className="text-xs text-slate-400 font-medium">Diária</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-sm font-semibold text-slate-900 dark:text-white">R$</span>
-                <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {equipamento.preco_diaria?.toFixed(0)?.replace('.', ',')}
                 </span>
               </div>
             </div>
             <button
               onClick={(e) => e.stopPropagation()}
-              className="bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2 active:scale-[0.98]"
+              className="bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white px-4 sm:px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2 active:scale-[0.98]"
             >
               Alugar Agora <ArrowRight size={16} />
             </button>
