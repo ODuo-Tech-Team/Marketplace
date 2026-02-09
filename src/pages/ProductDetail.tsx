@@ -232,7 +232,7 @@ export default function ProductDetail() {
         </div>
 
         {/* Card Overlapping Image */}
-        <div className="-mt-10 relative z-10 bg-white dark:bg-neutral-900 rounded-t-[2.5rem] p-8 min-h-[60vh] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
+        <div className="-mt-10 relative z-10 bg-white dark:bg-neutral-900 rounded-t-[2.5rem] p-4 sm:p-8 min-h-[60vh] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
           {/* Drag Handle */}
           <div className="w-12 h-1 bg-glass-hover rounded-full mx-auto mb-6" />
 
@@ -285,7 +285,7 @@ export default function ProductDetail() {
                   )}
                 </div>
               </Link>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {equipamento.locador_tem_loja && (
                   <Link
                     to={`/loja/${equipamento.locador_id}`}
@@ -307,7 +307,7 @@ export default function ProductDetail() {
 
           {/* Specs Grid */}
           {specs.length > 0 && (
-            <div className="flex gap-3 mb-8 overflow-x-auto pb-2 no-scrollbar">
+            <div className="flex gap-3 mb-8 overflow-x-auto pb-2">
               {specs.map((spec, i) => {
                 const Icon = getSpecIcon(spec.key)
                 return (
@@ -338,7 +338,7 @@ export default function ProductDetail() {
         </div>
 
         {/* Floating CTA Button */}
-        <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-neutral-900 border-t border-gray-100 dark:border-neutral-800 p-4 pb-8 z-20">
+        <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-neutral-900 border-t border-gray-100 dark:border-neutral-800 p-4 pb-4 sm:pb-8 z-20">
           <div className="max-w-md mx-auto">
             {disponivel ? (
               <button
@@ -366,7 +366,9 @@ export default function ProductDetail() {
           </Link>
 
           <div className="flex items-center gap-4">
-            <Link to="/chats" className="text-sm font-bold text-foreground-secondary hover:text-foreground transition-colors">Meus Pedidos</Link>
+            {user && (
+              <Link to="/chats" className="text-sm font-bold text-foreground-secondary hover:text-foreground transition-colors">Meus Pedidos</Link>
+            )}
             <div className="w-10 h-10 bg-surface-elevated rounded-full border border-border overflow-hidden flex items-center justify-center">
               <User size={16} className="text-foreground-secondary" />
             </div>
@@ -552,7 +554,7 @@ export default function ProductDetail() {
       {/* ========== LOCATOR PROFILE MODAL (Dark) ========== */}
       {showProfileModal && locadorNome && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface-card rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden relative animate-in zoom-in-95 border border-border-subtle">
+          <div className="bg-surface-card rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden relative animate-in zoom-in-95 border border-border-subtle max-h-[90vh] overflow-y-auto">
 
             {/* Header Colorido */}
             <div className="h-32 bg-surface-inset relative">
@@ -565,7 +567,7 @@ export default function ProductDetail() {
             </div>
 
             {/* Info Principal */}
-            <div className="px-8 pb-8 -mt-12">
+            <div className="px-4 sm:px-8 pb-4 sm:pb-8 -mt-12">
               <div className="flex justify-between items-end mb-6">
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full border-4 border-surface-card shadow-md bg-surface-elevated flex items-center justify-center text-foreground-secondary font-bold text-3xl">
@@ -584,7 +586,7 @@ export default function ProductDetail() {
               </div>
 
               {/* KPIs */}
-              <div className="grid grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-8">
                 <div className="bg-glass-hover p-4 rounded-2xl text-center border border-border-subtle">
                   <p className="text-2xl font-black text-foreground">{equipamento.locador_reviews_count || 0}</p>
                   <p className="text-[10px] uppercase font-bold text-foreground-muted">Avaliações</p>

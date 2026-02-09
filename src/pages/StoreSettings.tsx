@@ -428,13 +428,7 @@ export default function StoreSettings() {
       const updateData: Record<string, unknown> = {
         banner_url: formData.banner_url,
         avatar_url: formData.avatar_url,
-        cor_marca: formData.cor_marca,
         bio: formData.bio
-      }
-
-      // Adiciona slug apenas se diferente do atual
-      if (slugInput !== (profile?.loja_slug || '')) {
-        updateData.loja_slug = slugInput || null
       }
 
       const { error } = await supabase
@@ -495,7 +489,7 @@ export default function StoreSettings() {
   return (
     <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#0a0a0a]">
       {/* Header */}
-      <header className="bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800 sticky top-0 z-10">
+      <header className="bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800 sticky top-14 md:top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Store className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
@@ -615,8 +609,9 @@ export default function StoreSettings() {
 
               <div className="relative">
                 <div className="flex items-center">
-                  <span className="px-4 py-2.5 bg-gray-100 dark:bg-neutral-800 border border-r-0 border-gray-200 dark:border-neutral-700 rounded-l-xl text-sm text-slate-500 dark:text-slate-400 font-mono">
-                    trakto.com/loja/
+                  <span className="px-2 sm:px-4 py-2.5 bg-gray-100 dark:bg-neutral-800 border border-r-0 border-gray-200 dark:border-neutral-700 rounded-l-xl text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap flex-shrink-0">
+                    <span className="hidden sm:inline">trakto.com/loja/</span>
+                    <span className="sm:hidden">loja/</span>
                   </span>
                   <input
                     type="text"

@@ -62,14 +62,16 @@ export default function ProductCard({ equipamento, onClick }: ProductCardProps) 
           nomeEquipamento={equipamento.nome}
           heightClass="h-full"
         />
-        <span className="absolute top-3 left-3 bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-2.5 py-1 rounded-full z-10 uppercase tracking-wide border border-indigo-100 dark:border-indigo-800">
-          {equipamento.categoria || 'Equipamento'}
-        </span>
-        {equipamento.locador_verificado && (
-          <span className="absolute top-3 left-[115px] bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-full z-10 flex items-center gap-1 border border-emerald-100 dark:border-emerald-800">
-            <ShieldCheck size={12} /> Verificado
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+          <span className="bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border border-indigo-100 dark:border-indigo-800">
+            {equipamento.categoria || 'Equipamento'}
           </span>
-        )}
+          {equipamento.locador_verificado && (
+            <span className="bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-emerald-100 dark:border-emerald-800">
+              <ShieldCheck size={12} /> Verificado
+            </span>
+          )}
+        </div>
         <button
           onClick={toggleFav}
           className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-200 z-10 ${

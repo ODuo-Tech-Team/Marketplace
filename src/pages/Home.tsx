@@ -129,13 +129,11 @@ function RenterView() {
           .limit(12)
 
         if (error) {
-          console.error('Erro ao buscar lojas oficiais:', error)
           setLojasOficiais([])
         } else {
           setLojasOficiais(data || [])
         }
-      } catch (err) {
-        console.error('Erro ao buscar lojas oficiais:', err)
+      } catch {
         setLojasOficiais([])
       } finally {
         setLoadingLojas(false)
@@ -305,7 +303,10 @@ function RenterView() {
                 placeholder="Buscar equipamentos..."
                 className="flex-1 px-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-600 outline-none bg-transparent"
               />
-              <button className="h-full px-4 bg-slate-900 dark:bg-indigo-600">
+              <button
+                onClick={() => document.getElementById('ofertas-section')?.scrollIntoView({ behavior: 'smooth' })}
+                className="h-full px-4 bg-slate-900 dark:bg-indigo-600"
+              >
                 <Search size={18} className="text-white" strokeWidth={2.5} />
               </button>
             </div>
@@ -332,7 +333,7 @@ function RenterView() {
           </div>
 
           {/* Mobile: Scroll Horizontal */}
-          <div className="lg:hidden">
+          <div className="lg:hidden overflow-hidden">
             <div
               ref={lojasScrollRef}
               className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory"
@@ -461,10 +462,16 @@ function RenterView() {
       )}
 
       {/* Categorias Horizontal - MOBILE ONLY */}
-      <div className="lg:hidden px-4 mb-6">
+      <div className="lg:hidden px-4 mb-6 overflow-hidden">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white dark:text-white font-semibold text-base">Categorias</h3>
-          <button className="text-purple-400 dark:text-purple-400 text-xs font-medium">Ver tudo</button>
+          <h3 className="text-slate-900 dark:text-white font-semibold text-base">Categorias</h3>
+          <button
+            className="text-purple-600 dark:text-purple-400 text-xs font-medium"
+            onClick={() => {
+              const el = document.getElementById('categorias-section')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }}
+          >Ver tudo</button>
         </div>
 
         <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
@@ -573,9 +580,6 @@ function RenterView() {
                   <div className="w-1 h-5 lg:h-6 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-full" />
                   <h2 className="text-base lg:text-xl font-bold text-slate-900 dark:text-white">Destaques da Semana</h2>
                 </div>
-                <button className="text-xs lg:text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors">
-                  Ver tudo
-                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
@@ -598,9 +602,6 @@ function RenterView() {
                   <div className="w-1 h-5 lg:h-6 bg-gradient-to-b from-indigo-600 to-purple-600 rounded-full" />
                   <h2 className="text-base lg:text-xl font-bold text-slate-900 dark:text-white">Disponíveis para Locação</h2>
                 </div>
-                <button className="text-xs lg:text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors">
-                  Ver tudo
-                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">

@@ -165,19 +165,19 @@ export default function PremiumProductCard({
 
         {/* Footer */}
         <div className="mt-auto pt-4 border-t border-gray-100 dark:border-neutral-800">
-          <div className="flex items-end justify-between gap-4">
+          <div className="flex items-end justify-between gap-4 min-w-0">
             <div>
               <span className="text-xs text-slate-400 font-medium">Diária</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-sm font-semibold text-slate-900 dark:text-white">R$</span>
-                <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {equipamento.preco_diaria?.toFixed(0)?.replace('.', ',')}
                 </span>
               </div>
             </div>
             <button
               onClick={(e) => e.stopPropagation()}
-              className="bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2 active:scale-[0.98]"
+              className="bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white px-4 sm:px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2 active:scale-[0.98]"
             >
               Alugar Agora <ArrowRight size={16} />
             </button>

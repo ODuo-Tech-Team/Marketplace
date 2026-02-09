@@ -147,7 +147,10 @@ export default function Header({
         </div>
 
         {/* Search Button */}
-        <button className="h-full px-5 bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 transition-colors">
+        <button
+          onClick={() => document.getElementById('ofertas-section')?.scrollIntoView({ behavior: 'smooth' })}
+          className="h-full px-5 bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 transition-colors"
+        >
           <Search size={20} className="text-white" strokeWidth={2.5} />
         </button>
       </div>
@@ -175,7 +178,7 @@ export default function Header({
             {/* Mensagens - Versão Mobile (apenas ícone sino) */}
             <Link
               to="/chats"
-              className="sm:hidden p-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative"
+              className="sm:hidden p-2.5 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative"
             >
               <Bell size={20} />
               {mensagensNaoLidas > 0 && (
@@ -189,7 +192,7 @@ export default function Header({
 
         <button
           onClick={toggleTheme}
-          className="p-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+          className="p-2.5 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
           title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
         >
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
@@ -200,7 +203,7 @@ export default function Header({
           /* User Menu (Mobile + Desktop) - Para usuários LOGADOS */
           <div
             ref={userRef}
-            className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-1 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 rounded-lg relative"
+            className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors px-2 py-2 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 rounded-lg relative"
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
           >
             <User size={20} />
@@ -249,7 +252,7 @@ export default function Header({
 
                 {/* Favoritos */}
                 <Link
-                  to="/meus-pedidos"
+                  to="/favoritos"
                   className="flex items-center gap-3 px-6 py-3 text-slate-700 dark:text-white/90 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                   onClick={() => setIsUserMenuOpen(false)}
                 >
@@ -292,7 +295,7 @@ export default function Header({
             {/* Mobile: Apenas ícone de usuário que leva para auth */}
             <button
               onClick={() => navigate('/auth')}
-              className="sm:hidden p-2 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              className="sm:hidden p-2.5 text-slate-700 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
             >
               <User size={20} />
             </button>

@@ -123,9 +123,10 @@ function LayoutWithBottomNav({ children }: { children: React.ReactNode }) {
   // Cliente BottomNav só aparece para clientes LOGADOS (não locadores) em rotas específicas
   // Usuários não logados não veem BottomNav - usam Header para entrar/cadastrar
   // NÃO mostrar em /chats - o chat tem seu próprio sistema de navegação e o BottomNav cobre o input
-  const showBottomNav = user && !isLocador && !isLocadorPage && (
-    ['/', '/meus-pedidos', '/favoritos'].includes(location.pathname)
-  )
+  const showBottomNav = user && !isLocador && !isLocadorPage &&
+    !location.pathname.startsWith('/chats') &&
+    !location.pathname.startsWith('/auth') &&
+    !location.pathname.startsWith('/dashboard')
 
   // Nome do usuário para exibir no menu de perfil
   const nomeUsuario = profile?.full_name || profile?.email?.split('@')[0] || 'Usuário'

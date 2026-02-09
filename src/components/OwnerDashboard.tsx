@@ -440,7 +440,7 @@ function NovoEquipamentoDarkModal({
           {/* Tipo */}
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Tipo *</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {vcModal.categories.map(cat => {
                 const isActive = categoria === cat
                 // Pick icon per category name pattern
@@ -480,7 +480,7 @@ function NovoEquipamentoDarkModal({
               {mostrarCamposTecnicos && (
                 <div className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-4">
                   <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Dados Técnicos (Linha Amarela)</p>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Ano</label>
                       <input type="number" value={ano} onChange={e => setAno(e.target.value)}
@@ -1067,7 +1067,7 @@ function CalendarioUnificado({ equipamentos, propostas, onEquipamentoClick }: Ca
       )}
 
       {/* Upcoming Reservations List */}
-      <div className="bg-white dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 p-8 shadow-sm">
+      <div className="bg-white dark:bg-neutral-900 rounded-[2rem] border border-gray-100 dark:border-neutral-800 p-4 md:p-8 shadow-sm">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Próximas Reservas</h3>
         {activeReservations.length === 0 ? (
           <div className="text-center py-12">
@@ -1091,17 +1091,17 @@ function CalendarioUnificado({ equipamentos, propostas, onEquipamentoClick }: Ca
                   onClick={() => res.equipamento && onEquipamentoClick?.(res.equipamento.id)}
                   className={`p-4 rounded-2xl border ${theme.border} ${theme.bgLight} cursor-pointer hover:scale-[1.01] transition-all`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2.5 rounded-xl ${theme.bg} text-white`}>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`p-2.5 rounded-xl ${theme.bg} text-white flex-shrink-0`}>
                         {config?.icon ? <config.icon size={20} /> : <Package size={20} />}
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">{res.equipamento?.nome || 'Equipamento'}</h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{res.locatario_nome || 'Cliente'}</p>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{res.equipamento?.nome || 'Equipamento'}</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{res.locatario_nome || 'Cliente'}</p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                         <Calendar size={14} />
                         {inicio?.toLocaleDateString('pt-BR')}
@@ -1238,11 +1238,7 @@ function StoreSettingsTab() {
       const updateData: Record<string, unknown> = {
         banner_url: bannerUrl,
         avatar_url: avatarUrl,
-        cor_marca: corMarca,
         bio: bio || null
-      }
-      if (lojaSlug !== (profile?.loja_slug || '')) {
-        updateData.loja_slug = lojaSlug || null
       }
 
       const { error } = await supabase.from('profiles').update(updateData).eq('id', user.id)
@@ -2045,14 +2041,14 @@ export default function OwnerDashboard() {
         className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#0a0a0a] border-t border-gray-200 dark:border-white/10 z-50"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
       >
-        <div className="h-16 flex justify-around items-center px-1">
+        <div className="h-16 flex justify-around items-center px-1 overflow-x-auto">
           {navItems.map(item => {
             const isActive = activeTab === item.key
             return (
               <button
                 key={item.key}
                 onClick={() => handleTabChange(item.key)}
-                className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-all duration-200 relative active:scale-95"
+                className="flex flex-col items-center justify-center gap-0.5 flex-shrink-0 min-w-[48px] h-full transition-all duration-200 relative active:scale-95"
               >
                 {isActive && (
                   <div className="absolute top-0 w-8 h-1 bg-indigo-600 dark:bg-purple-500 rounded-b-full" />
@@ -2543,7 +2539,7 @@ export default function OwnerDashboard() {
             {activeTab === 'finance' && (
               <div className="space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {/* Finance KPIs */}
-                <div className="grid grid-cols-3 gap-2 md:gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-6">
                   <div className="bg-white dark:bg-neutral-900 rounded-xl md:rounded-[2rem] border border-gray-100 dark:border-neutral-800 p-3 md:p-8 shadow-sm relative overflow-hidden hover:border-emerald-200 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 transition-all">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 opacity-5 blur-3xl rounded-full" />
                     <div className="flex justify-between items-start mb-2 md:mb-4 relative z-10">

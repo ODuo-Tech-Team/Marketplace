@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   Search, Star, MapPin, ShieldCheck, Award, Users, Package,
@@ -31,8 +31,8 @@ interface LocadorStorefront {
   reviews_count: number | null
   followers_count: number | null
   vertical_principal: string | null
-  cor_marca: string | null  // Cor personalizada da marca
-  loja_slug: string | null  // Slug personalizado da URL
+  cor_marca?: string | null  // Cor personalizada da marca
+  loja_slug?: string | null  // Slug personalizado da URL
   created_at: string
 }
 
@@ -61,6 +61,9 @@ export default function Storefront() {
   const [sortBy, setSortBy] = useState<SortOption>('recent')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
+  // Ref para evitar toast duplicado (React StrictMode)
+  const toastShownRef = useRef(false)
+
   // Helper para verificar se e UUID
   const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 
@@ -76,7 +79,7 @@ export default function Storefront() {
         // Busca por ID
         const { data: profileData, error } = await supabase
           .from('profiles')
-          .select('id, full_name, nome_empresa, avatar_url, banner_url, bio, cidade, uf, verificado, destacado, tem_loja, rating_average, reviews_count, followers_count, vertical_principal, cor_marca, loja_slug, created_at')
+          .select('id, full_name, nome_empresa, avatar_url, banner_url, bio, cidade, uf, verificado, destacado, tem_loja, rating_average, reviews_count, followers_count, vertical_principal, created_at')
           .eq('id', locadorId)
           .eq('tipo_usuario', 'locador')
           .single()
@@ -84,22 +87,32 @@ export default function Storefront() {
         if (error) throw error
         data = profileData as LocadorStorefront
       } else {
-        // Busca por slug usando a RPC function
-        const { data: slugData, error } = await supabase.rpc('get_locador_by_slug', { p_slug: locadorId })
-
-        if (error) throw error
-        if (slugData && slugData.length > 0) {
-          data = slugData[0] as LocadorStorefront
+        // Busca por slug - tenta RPC primeiro, fallback para query direta
+        try {
+          const { data: slugData, error } = await supabase.rpc('get_locador_by_slug', { p_slug: locadorId })
+          if (!error && slugData && slugData.length > 0) {
+            data = slugData[0] as LocadorStorefront
+          }
+        } catch {
+          // RPC nao disponivel - slug lookup nao suportado ainda
         }
       }
 
       if (!data) {
-        throw new Error('Loja nao encontrada')
+        if (!toastShownRef.current) {
+          toastShownRef.current = true
+          toast.error('Locador nao encontrado')
+        }
+        navigate('/')
+        return
       }
 
       // Verifica se a loja esta ativa (monetizacao)
-      if (!data.tem_loja) {
-        toast.error('Esta loja esta temporariamente indisponivel')
+      if (data.tem_loja === false) {
+        if (!toastShownRef.current) {
+          toastShownRef.current = true
+          toast.error('Esta loja esta temporariamente indisponivel')
+        }
         navigate('/')
         return
       }
@@ -108,8 +121,10 @@ export default function Storefront() {
       setResolvedLocadorId(data.id)
       setFollowersCount(data.followers_count || 0)
     } catch (err) {
-      console.error('Erro ao buscar locador:', err)
-      toast.error('Locador nao encontrado')
+      if (!toastShownRef.current) {
+        toastShownRef.current = true
+        toast.error('Erro ao carregar loja')
+      }
       navigate('/')
     } finally {
       setLoading(false)
@@ -441,7 +456,7 @@ export default function Storefront() {
               )}
 
               {/* Stats */}
-              <div className="flex items-center justify-center sm:justify-start gap-4 text-sm">
+              <div className="flex items-center justify-center sm:justify-start gap-4 text-sm flex-wrap">
                 {/* Rating */}
                 {(locador.reviews_count || 0) > 0 && (
                   <div className="flex items-center gap-1">
@@ -495,9 +510,9 @@ export default function Storefront() {
             </div>
 
             {/* Filtros */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 overflow-x-auto">
               {/* Categoria */}
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <select
                   value={selectedCategoria}
                   onChange={(e) => setSelectedCategoria(e.target.value)}
@@ -512,7 +527,7 @@ export default function Storefront() {
               </div>
 
               {/* Ordenacao */}
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortOption)}
@@ -677,7 +692,7 @@ function ListProductCard({
       className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800 shadow-sm hover:shadow-lg transition-all cursor-pointer flex overflow-hidden group"
     >
       {/* Imagem */}
-      <div className="w-32 sm:w-48 h-32 sm:h-36 flex-shrink-0 bg-gray-100 dark:bg-slate-800 overflow-hidden">
+      <div className="w-24 sm:w-48 h-32 sm:h-36 flex-shrink-0 bg-gray-100 dark:bg-slate-800 overflow-hidden">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -692,7 +707,7 @@ function ListProductCard({
       </div>
 
       {/* Info */}
-      <div className="flex-1 p-4 flex flex-col justify-between">
+      <div className="flex-1 min-w-0 p-4 flex flex-col justify-between">
         <div>
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
@@ -711,12 +726,12 @@ function ListProductCard({
           )}
         </div>
 
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center justify-between min-w-0 mt-3 gap-2">
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 min-w-0">
             {equipamento.cidade && (
               <>
-                <MapPin size={14} />
-                <span>{equipamento.cidade}{equipamento.uf ? `, ${equipamento.uf}` : ''}</span>
+                <MapPin size={14} className="flex-shrink-0" />
+                <span className="truncate">{equipamento.cidade}{equipamento.uf ? `, ${equipamento.uf}` : ''}</span>
               </>
             )}
           </div>
