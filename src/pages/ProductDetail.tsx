@@ -7,7 +7,7 @@ import { getVerticalConfig, type VerticalKey } from '../config/verticals'
 import { getSpecIcon } from '../config/specIcons'
 import FotosCarrossel from '../components/FotosCarrossel'
 import {
-  ArrowLeft, MapPin, ShieldCheck, MessageCircle,
+  ArrowLeft, MapPin, MessageCircle,
   Heart, Star, CheckCircle2, X, Loader2, Package, Clock, User, Truck, Store, ExternalLink
 } from 'lucide-react'
 import TraktoLogo from '../components/TraktoLogo'
@@ -327,14 +327,7 @@ export default function ProductDetail() {
             {descricao}
           </p>
 
-          {/* Garantia Trakto */}
-          <div className="p-4 rounded-2xl bg-surface-inset/50 flex items-center gap-4 mb-24 border border-border-subtle">
-            <ShieldCheck size={24} className="text-green-500 flex-shrink-0" />
-            <div>
-              <p className="font-bold text-foreground text-sm">Garantia Trakto</p>
-              <p className="text-xs text-foreground-muted">Pagamento seguro e suporte 24h.</p>
-            </div>
-          </div>
+          <div className="mb-24" />
         </div>
 
         {/* Floating CTA Button */}
@@ -541,8 +534,7 @@ export default function ProductDetail() {
                 )}
 
                 <p className="text-center text-xs text-foreground-muted leading-tight px-4">
-                  <ShieldCheck size={14} className="inline mr-1 text-green-500" />
-                  Pagamento seguro via Trakto.
+                  Negocie diretamente com o locador.
                 </p>
               </div>
             </div>
