@@ -422,15 +422,17 @@ export default function AuthPage() {
         {/* ========== FORM AREA ========== */}
         <div className="flex-1 p-8 md:p-12 overflow-y-auto bg-white dark:bg-neutral-900 relative">
 
+          {/* Botão Voltar */}
+          <button
+            onClick={() => navigate('/')}
+            className="absolute top-4 left-4 sm:top-6 sm:left-6 p-2.5 rounded-xl bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 dark:hover:bg-neutral-700 text-slate-600 dark:text-slate-300 transition-colors z-10"
+          >
+            <ArrowLeft size={20} />
+          </button>
+
           {/* ========== STEP 0: DECISION ========== */}
           {view === 'decision' && (
             <div className="h-full flex flex-col justify-center animate-in">
-              <button
-                onClick={() => navigate('/')}
-                className="absolute top-4 left-4 sm:top-6 sm:left-6 p-2.5 rounded-xl bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 dark:hover:bg-neutral-700 text-slate-600 dark:text-slate-300 transition-colors z-10"
-              >
-                <ArrowLeft size={20} />
-              </button>
               <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2 text-center">
                 Como você quer usar o TRAKTO?
               </h2>
