@@ -5,7 +5,6 @@ import { formatarHora, formatarData, normalizeId, isSystemMessage as checkSystem
 interface ChatMessagesProps {
   mensagens: Mensagem[]
   userId: string
-  locadorId?: string
 }
 
 export const ChatMessages = forwardRef<HTMLDivElement, ChatMessagesProps>(

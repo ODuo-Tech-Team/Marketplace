@@ -423,7 +423,7 @@ export default function ChatPage() {
             />
           )}
 
-          <ChatMessages mensagens={mensagens} userId={userId} locadorId={chat?.locador_id} ref={messagesEndRef} />
+          <ChatMessages mensagens={mensagens} userId={userId} ref={messagesEndRef} />
 
           {/* ReviewCard - aparece para locatário após finalização */}
           {isLocatario && chat?.proposta?.status === 'finalizada' && chat?.proposta?.id && (

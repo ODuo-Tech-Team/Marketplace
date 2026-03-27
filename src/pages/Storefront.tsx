@@ -167,7 +167,7 @@ export default function Storefront() {
 
       setEquipamentos(mapped)
     } catch (err) {
-      console.error('Erro ao buscar equipamentos:', err)
+      if (import.meta.env.DEV) console.error('Erro ao buscar equipamentos:', err)
     } finally {
       setLoadingEquipamentos(false)
     }
@@ -187,7 +187,7 @@ export default function Storefront() {
         setIsFollowing(!!data)
       }
     } catch (err) {
-      console.error('Erro ao verificar follow:', err)
+      if (import.meta.env.DEV) console.error('Erro ao verificar follow:', err)
     }
   }, [user, resolvedLocadorId])
 
@@ -219,7 +219,7 @@ export default function Storefront() {
         toast.error(result.error || 'Erro ao processar')
       }
     } catch (err) {
-      console.error('Erro ao toggle follow:', err)
+      if (import.meta.env.DEV) console.error('Erro ao toggle follow:', err)
       toast.error('Erro ao processar. Tente novamente.')
     } finally {
       setFollowLoading(false)

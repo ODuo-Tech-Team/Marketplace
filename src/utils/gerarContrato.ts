@@ -1,5 +1,3 @@
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import type { Proposta, Chat, Equipamento } from '../contexts/AppContext'
 
 interface DadosContrato {
@@ -81,7 +79,8 @@ function formatCurrency(value: number | null | undefined): string {
 }
 
 // Gera o PDF do Termo de Locação (formato limpo e profissional)
-export function gerarTermoLocacao(dados: DadosContrato): void {
+export async function gerarTermoLocacao(dados: DadosContrato): Promise<void> {
+  const { jsPDF } = await import('jspdf')
   const { proposta, chat, equipamento, locadorNome, locatarioNome } = dados
 
   const doc = new jsPDF()
@@ -263,7 +262,8 @@ export function gerarTermoLocacao(dados: DadosContrato): void {
 }
 
 // Gera o PDF do Contrato Completo de Locação
-export function gerarContratoCompleto(dados: DadosContratoCompleto): void {
+export async function gerarContratoCompleto(dados: DadosContratoCompleto): Promise<void> {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()

@@ -29,11 +29,7 @@ function getFileIcon(tipo: string) {
   return <File className="w-5 h-5" />
 }
 
-// Gera URL publica para o arquivo
-function getPublicUrl(path: string): string {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
-}
+import { getStorageUrl } from '../../lib/storage'
 
 export function FileAttachment({
   arquivoUrl,
@@ -47,7 +43,7 @@ export function FileAttachment({
 
   const isImage = arquivoTipo.startsWith('image/')
   const isPdf = arquivoTipo === 'application/pdf'
-  const publicUrl = getPublicUrl(arquivoUrl)
+  const publicUrl = getStorageUrl(arquivoUrl)
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -58,7 +54,7 @@ export function FileAttachment({
         .download(arquivoUrl)
 
       if (error) {
-        console.error('Erro ao baixar arquivo:', error)
+        if (import.meta.env.DEV) console.error('Erro ao baixar arquivo:', error)
         // Fallback: abre URL direta
         window.open(publicUrl, '_blank')
         return
@@ -73,9 +69,9 @@ export function FileAttachment({
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
-      console.error('Erro inesperado ao baixar:', err)
+      if (import.meta.env.DEV) console.error('Erro inesperado ao baixar:', err)
       window.open(publicUrl, '_blank')
     } finally {
       setDownloading(false)
@@ -91,6 +87,9 @@ export function FileAttachment({
             src={publicUrl}
             alt={arquivoNome}
             className="max-h-48 w-auto rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+            loading="lazy"
+            width={320}
+            height={192}
             onClick={() => window.open(publicUrl, '_blank')}
             onError={() => setImageError(true)}
           />

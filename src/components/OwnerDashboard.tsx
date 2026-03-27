@@ -8,6 +8,7 @@ import {
 } from '../contexts/AppContext'
 import { VERTICAL_CONFIGS, VERTICALS, type VerticalKey, getVerticalConfig } from '../config/verticals'
 import { supabase } from '../lib/supabase'
+import { getStorageUrl } from '../lib/storage'
 import {
   LayoutDashboard, Package, MessageSquare, Wallet,
   Plus, Search, Truck, Calendar, TrendingUp, ChevronRight, ChevronLeft,
@@ -1199,9 +1200,9 @@ function StoreSettingsTab() {
       const { error } = await supabase.storage.from('equipamentos').upload(fileName, file, { cacheControl: '3600', upsert: true })
       if (error) throw error
 
-      return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/equipamentos/${fileName}`
+      return getStorageUrl(fileName)
     } catch (err) {
-      console.error('Erro upload:', err)
+      if (import.meta.env.DEV) console.error('Erro upload:', err)
       return null
     }
   }
@@ -1247,7 +1248,7 @@ function StoreSettingsTab() {
       await recarregarProfile()
       // Toast seria ideal aqui
     } catch (err) {
-      console.error('Erro ao salvar:', err)
+      if (import.meta.env.DEV) console.error('Erro ao salvar:', err)
     } finally {
       setSaving(false)
     }
@@ -1758,7 +1759,7 @@ export default function OwnerDashboard() {
 
   // ---------- HANDLERS ----------
   const handleSair = async () => {
-    try { await signOut() } catch (err) { console.error('[OwnerDashboard] Erro ao sair:', err) }
+    try { await signOut() } catch (err) { if (import.meta.env.DEV) console.error('[OwnerDashboard] Erro ao sair:', err) }
     finally { navigate('/') }
   }
   const handleTabChange = (tab: TabKey) => { setActiveTab(tab); if (user?.id) fetchMensagensNaoLidas(user.id) }
@@ -1790,7 +1791,7 @@ export default function OwnerDashboard() {
       .eq('id', propostaId)
 
     if (error) {
-      console.error('[OwnerDashboard] Erro ao atualizar status:', error)
+      if (import.meta.env.DEV) console.error('[OwnerDashboard] Erro ao atualizar status:', error)
       // Reverte em caso de erro
       setPropostas(prev => prev.map(p =>
         p.id === propostaId ? { ...p, status: pago ? 'aceita' : 'finalizada' } : p
@@ -1831,7 +1832,7 @@ export default function OwnerDashboard() {
       const uploadResult = await uploadInspectionPhotos(photos, user.id, despachoModal.propostaId)
 
       if (uploadResult.error) {
-        console.error('Erro ao fazer upload das fotos:', uploadResult.error)
+        if (import.meta.env.DEV) console.error('Erro ao fazer upload das fotos:', uploadResult.error)
         setDespachando(null)
         return
       }
@@ -1853,10 +1854,10 @@ export default function OwnerDashboard() {
         setDespachoModal(null)
         reloadData()
       } else {
-        console.error('Erro ao despachar:', result.error)
+        if (import.meta.env.DEV) console.error('Erro ao despachar:', result.error)
       }
     } catch (err) {
-      console.error('Erro inesperado ao despachar:', err)
+      if (import.meta.env.DEV) console.error('Erro inesperado ao despachar:', err)
     } finally {
       setDespachando(null)
     }
@@ -1921,7 +1922,7 @@ export default function OwnerDashboard() {
   const getImageUrl = (path: string | null | undefined): string | null => {
     if (!path) return null
     if (path.startsWith('http') || path.startsWith('data:')) return path
-    return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/equipamentos/${path}`
+    return getStorageUrl(path)
   }
 
   // ---------- NAV ITEMS ----------

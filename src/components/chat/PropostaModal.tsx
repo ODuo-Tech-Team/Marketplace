@@ -76,7 +76,7 @@ function calcularDiasEntreDatas(inicio: string, fim: string): number {
   const d1 = new Date(inicio)
   const d2 = new Date(fim)
   const diff = d2.getTime() - d1.getTime()
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+  return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1)
 }
 
 export function PropostaModal({
@@ -218,7 +218,7 @@ export function PropostaModal({
   const hoje = new Date().toISOString().split('T')[0]
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true" aria-label="Enviar Proposta">
       <div className="bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl shadow-indigo-500/10 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-neutral-800">
         {/* Gradient Bar */}
         <div className="h-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-t-3xl" />

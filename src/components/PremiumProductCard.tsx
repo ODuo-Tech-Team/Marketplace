@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Heart, ArrowRight, Star, MapPin, Crown, Sparkles, Store } from 'lucide-react'
 import FotosCarrossel from './FotosCarrossel'
 import { type Equipamento, isLinhaAmarela, getLocadorDisplayName } from '../contexts/AppContext'
 import { TrustSealsRow } from './TrustSeal'
 import type { VerticalKey } from '../config/verticals'
-
-const FAVORITES_KEY = 'trakto_favorites'
+import { useFavorites } from '../hooks/useFavorites'
 
 interface PremiumProductCardProps {
   equipamento: Equipamento
@@ -27,28 +25,11 @@ export default function PremiumProductCard({
   onClick,
 }: PremiumProductCardProps) {
   const tags = deriveTags(equipamento)
-
-  const [isFav, setIsFav] = useState(false)
-  useEffect(() => {
-    try {
-      const ids: string[] = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
-      setIsFav(ids.includes(equipamento.id))
-    } catch { /* ignore */ }
-  }, [equipamento.id])
+  const { isFav, toggleFav: rawToggle } = useFavorites(equipamento.id)
 
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation()
-    try {
-      let ids: string[] = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
-      if (ids.includes(equipamento.id)) {
-        ids = ids.filter(fid => fid !== equipamento.id)
-        setIsFav(false)
-      } else {
-        ids.push(equipamento.id)
-        setIsFav(true)
-      }
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids))
-    } catch { /* ignore */ }
+    rawToggle()
   }
 
   // Locador PRO usa indigo/purple, destaque individual usa amber
@@ -104,6 +85,7 @@ export default function PremiumProductCard({
           </div>
           <button
             onClick={toggleFav}
+            aria-label={isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
             className={`p-2 rounded-full flex-shrink-0 ml-3 transition-colors ${
               isFav
                 ? 'bg-red-500/20 text-red-500'

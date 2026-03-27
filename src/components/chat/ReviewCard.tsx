@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Star, CheckCircle2, Loader2, X } from 'lucide-react'
 import { useApp } from '../../contexts/AppContext'
 
@@ -20,9 +20,22 @@ export default function ReviewCard({ rentalId, reviewerId, targetId, locadorNome
   const [alreadyReviewed, setAlreadyReviewed] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [dismissed, setDismissed] = useState(false)
+  const [checkingReview, setCheckingReview] = useState(true)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    checkReviewExists(rentalId).then(exists => setAlreadyReviewed(exists))
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    setCheckingReview(true)
+    checkReviewExists(rentalId).then(exists => {
+      if (mountedRef.current) {
+        setAlreadyReviewed(exists)
+        setCheckingReview(false)
+      }
+    })
   }, [rentalId, checkReviewExists])
 
   // Auto-hide success message after 3 seconds
@@ -57,8 +70,8 @@ export default function ReviewCard({ rentalId, reviewerId, targetId, locadorNome
     setDismissed(true)
   }
 
-  // Loading check
-  if (alreadyReviewed === null) return null
+  // Loading check - show spinner while checking review existence
+  if (alreadyReviewed === null || checkingReview) return null
   // Already reviewed or dismissed - don't render
   if (alreadyReviewed || dismissed) return null
 
@@ -106,6 +119,7 @@ export default function ReviewCard({ rentalId, reviewerId, targetId, locadorNome
               onMouseEnter={() => setHoverRating(star)}
               onMouseLeave={() => setHoverRating(0)}
               onClick={() => setRating(star)}
+              aria-label={`Avaliar ${star} estrela${star > 1 ? 's' : ''}`}
               className="transition-transform hover:scale-110 focus:scale-90"
             >
               <Star
@@ -135,9 +149,9 @@ export default function ReviewCard({ rentalId, reviewerId, targetId, locadorNome
         {/* Submit Button */}
         <button
           onClick={handleSubmit}
-          disabled={rating === 0 || submitting}
+          disabled={rating === 0 || submitting || checkingReview}
           className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all
-            ${rating === 0 || submitting
+            ${rating === 0 || submitting || checkingReview
               ? 'bg-slate-300 dark:bg-neutral-700 cursor-not-allowed'
               : 'bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-600 dark:hover:bg-indigo-500 shadow-indigo-500/20'}`}
         >

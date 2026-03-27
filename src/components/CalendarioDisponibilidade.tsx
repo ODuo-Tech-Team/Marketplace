@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Calendar from 'react-calendar'
 import { X, Loader2, Calendar as CalendarIcon, Package } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getStorageUrl } from '../lib/storage'
 import type { Equipamento } from '../contexts/AppContext'
 
 // Tipos para as reservas/ocupações
@@ -40,8 +41,7 @@ function isDateInRange(date: Date, start: Date, end: Date): boolean {
 function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null
   if (path.startsWith('http') || path.startsWith('data:')) return path
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
+  return getStorageUrl(path)
 }
 
 export default function CalendarioDisponibilidade({

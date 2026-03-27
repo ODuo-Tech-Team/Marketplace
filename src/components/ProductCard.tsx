@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Heart, Star, MapPin, ShieldCheck, ArrowRight, Store } from 'lucide-react'
 import FotosCarrossel from './FotosCarrossel'
@@ -8,8 +7,7 @@ import { TrustSealsRow } from './TrustSeal'
 import type { VerticalKey } from '../config/verticals'
 import { useAuth } from '../contexts/AuthContext'
 import { useLoginModal } from '../contexts/LoginModalContext'
-
-const FAVORITES_KEY = 'trakto_favorites'
+import { useFavorites } from '../hooks/useFavorites'
 
 interface ProductCardProps {
   equipamento: Equipamento
@@ -17,37 +15,17 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ equipamento, onClick }: ProductCardProps) {
-  const [isFav, setIsFav] = useState(false)
   const { user } = useAuth()
   const { openLoginModal } = useLoginModal()
-
-  useEffect(() => {
-    try {
-      const ids: string[] = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
-      setIsFav(ids.includes(equipamento.id))
-    } catch { /* ignore */ }
-  }, [equipamento.id])
+  const { isFav, toggleFav: rawToggle } = useFavorites(equipamento.id)
 
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation()
-
-    // Se não estiver logado, abre modal de login
     if (!user) {
       openLoginModal('Para favoritar equipamentos, faca login ou crie sua conta')
       return
     }
-
-    try {
-      let ids: string[] = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')
-      if (ids.includes(equipamento.id)) {
-        ids = ids.filter(fid => fid !== equipamento.id)
-        setIsFav(false)
-      } else {
-        ids.push(equipamento.id)
-        setIsFav(true)
-      }
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids))
-    } catch { /* ignore */ }
+    rawToggle()
   }
 
   return (
@@ -74,6 +52,7 @@ export default function ProductCard({ equipamento, onClick }: ProductCardProps) 
         </div>
         <button
           onClick={toggleFav}
+          aria-label={isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
           className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-200 z-10 ${
             isFav
               ? 'bg-red-500/20 text-red-500'

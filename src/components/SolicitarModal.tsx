@@ -5,11 +5,12 @@ import {
 } from 'lucide-react'
 import { type Equipamento, isLinhaAmarela, ESTADOS_BR } from '../contexts/AppContext'
 
+import { getStorageUrl } from '../lib/storage'
+
 function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null
   if (path.startsWith('http') || path.startsWith('data:')) return path
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
+  return getStorageUrl(path)
 }
 
 interface SolicitarModalProps {
@@ -54,7 +55,7 @@ export default function SolicitarModal({ isOpen, onClose, equipamento, onEnviar,
     if (!dataInicio || !dataFim) return 0
     const d1 = new Date(dataInicio)
     const d2 = new Date(dataFim)
-    return Math.max(0, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)))
+    return Math.max(1, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1)
   }
   const quantidadeDias = calcDias()
 
@@ -79,7 +80,7 @@ export default function SolicitarModal({ isOpen, onClose, equipamento, onEnviar,
   if (!isOpen || !equipamento) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Solicitar Reserva">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -110,7 +111,7 @@ export default function SolicitarModal({ isOpen, onClose, equipamento, onEnviar,
           <div className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-neutral-800 border border-gray-100 dark:border-neutral-700">
             <div className="w-16 h-16 rounded-xl bg-white dark:bg-neutral-700 overflow-hidden flex-shrink-0">
               {fotoUrl ? (
-                <img src={fotoUrl} alt={equipamento.nome} className="w-full h-full object-cover" />
+                <img src={fotoUrl} alt={equipamento.nome} className="w-full h-full object-cover" loading="lazy" width={64} height={64} />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Package className="w-6 h-6 text-slate-400" />

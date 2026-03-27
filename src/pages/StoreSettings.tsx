@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getStorageUrl } from '../lib/storage'
 import { toast } from 'sonner'
 import {
   Store, Upload, Palette, Link2, FileText, Save, ExternalLink,
@@ -356,16 +357,7 @@ export default function StoreSettings() {
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
       const fileName = `lojas/${user.id}/${type}-${Date.now()}.${fileExt}`
 
-      // Deleta imagem antiga se existir
-      const oldUrl = type === 'banner' ? formData.banner_url : formData.avatar_url
-      if (oldUrl) {
-        const oldPath = oldUrl.split('/equipamentos/')[1]
-        if (oldPath) {
-          await supabase.storage.from('equipamentos').remove([oldPath])
-        }
-      }
-
-      // Upload nova imagem
+      // Upload nova imagem PRIMEIRO
       const { error: uploadError } = await supabase.storage
         .from('equipamentos')
         .upload(fileName, file, {
@@ -375,11 +367,18 @@ export default function StoreSettings() {
 
       if (uploadError) throw uploadError
 
-      // Retorna URL publica
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-      return `${supabaseUrl}/storage/v1/object/public/equipamentos/${fileName}`
+      // Só deleta imagem antiga DEPOIS do upload ter sucesso
+      const oldUrl = type === 'banner' ? formData.banner_url : formData.avatar_url
+      if (oldUrl) {
+        const oldPath = oldUrl.split('/equipamentos/')[1]
+        if (oldPath) {
+          await supabase.storage.from('equipamentos').remove([oldPath])
+        }
+      }
+
+      return getStorageUrl(fileName)
     } catch (err) {
-      console.error('Erro no upload:', err)
+      if (import.meta.env.DEV) console.error('Erro no upload:', err)
       toast.error('Erro ao fazer upload da imagem')
       return null
     }
@@ -428,7 +427,9 @@ export default function StoreSettings() {
       const updateData: Record<string, unknown> = {
         banner_url: formData.banner_url,
         avatar_url: formData.avatar_url,
-        bio: formData.bio
+        bio: formData.bio,
+        cor_marca: formData.cor_marca,
+        loja_slug: slugInput || formData.loja_slug
       }
 
       const { error } = await supabase
@@ -443,7 +444,7 @@ export default function StoreSettings() {
 
       toast.success('Loja atualizada com sucesso!')
     } catch (err) {
-      console.error('Erro ao salvar:', err)
+      if (import.meta.env.DEV) console.error('Erro ao salvar:', err)
       toast.error('Erro ao salvar alteracoes')
     } finally {
       setSaving(false)

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Package, ChevronLeft, ChevronRight } from 'lucide-react'
+import { getStorageUrl } from '../lib/storage'
 
 interface FotosCarrosselProps {
   fotos?: string[] | null
@@ -39,15 +40,12 @@ export default function FotosCarrossel({ fotos, imagemPrincipal, nomeEquipamento
 
         // Base64 sem prefixo - ignora (dado corrompido)
         if (isBase64(path)) {
-          console.warn('Imagem Base64 detectada sem prefixo data: - ignorando')
+          if (import.meta.env.DEV) console.warn('Imagem Base64 detectada sem prefixo data: - ignorando')
           return
         }
 
         // Path relativo do Supabase Storage - constrói URL pública
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-        if (supabaseUrl) {
-          urlsFotos.push(`${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`)
-        }
+        urlsFotos.push(getStorageUrl(path))
       })
     }
     if (urlsFotos.length === 0 && imagemPrincipal) {
@@ -69,7 +67,7 @@ export default function FotosCarrossel({ fotos, imagemPrincipal, nomeEquipamento
   if (todasFotos.length === 1) {
     return (
       <div className={`w-full ${heightClass} overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-neutral-800 p-3`}>
-        <img src={todasFotos[0]} alt={nomeEquipamento} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+        <img src={todasFotos[0]} alt={nomeEquipamento} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500" loading="lazy" width={400} height={300} />
       </div>
     )
   }
@@ -80,16 +78,21 @@ export default function FotosCarrossel({ fotos, imagemPrincipal, nomeEquipamento
         src={todasFotos[indiceAtual]}
         alt={`${nomeEquipamento} - ${indiceAtual + 1}`}
         className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-500"
+        loading="lazy"
+        width={400}
+        height={300}
       />
       <div className="absolute inset-0 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button
           onClick={(e) => { e.stopPropagation(); setIndiceAtual(i => i > 0 ? i - 1 : todasFotos.length - 1) }}
+          aria-label="Foto anterior"
           className="ml-2 p-1.5 bg-white/80 backdrop-blur text-foreground-secondary rounded-full hover:bg-white shadow-lg"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); setIndiceAtual(i => i < todasFotos.length - 1 ? i + 1 : 0) }}
+          aria-label="Proxima foto"
           className="mr-2 p-1.5 bg-white/80 backdrop-blur text-foreground-secondary rounded-full hover:bg-white shadow-lg"
         >
           <ChevronRight className="w-4 h-4" />

@@ -1,4 +1,4 @@
-import { ArrowLeft, User, LogOut, Settings, Bell, HelpCircle, Shield } from 'lucide-react'
+import { ArrowLeft, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -8,13 +8,6 @@ export default function Perfil() {
 
   const nomeUsuario = profile?.nome_empresa || profile?.full_name || 'Usuário'
   const emailUsuario = profile?.email || ''
-
-  const menuItems = [
-    { icon: Settings, label: 'Configurações', onClick: () => {} },
-    { icon: Bell, label: 'Notificações', onClick: () => {} },
-    { icon: Shield, label: 'Privacidade', onClick: () => {} },
-    { icon: HelpCircle, label: 'Ajuda e Suporte', onClick: () => {} },
-  ]
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#0a0a0a] pb-24 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -57,20 +50,6 @@ export default function Perfil() {
               <p className="text-white/70 text-sm">{emailUsuario}</p>
             </div>
           </div>
-        </div>
-
-        {/* Menu Items */}
-        <div className="bg-white dark:bg-[#1a1a1e] rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden mb-6">
-          {menuItems.map((item, index) => (
-            <button
-              key={index}
-              onClick={item.onClick}
-              className="w-full flex items-center gap-3 px-6 py-4 text-slate-700 dark:text-white/90 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-gray-100 dark:border-white/5 last:border-b-0"
-            >
-              <item.icon size={20} className="text-slate-500 dark:text-gray-400" />
-              <span className="font-medium">{item.label}</span>
-            </button>
-          ))}
         </div>
 
         {/* Logout Button */}

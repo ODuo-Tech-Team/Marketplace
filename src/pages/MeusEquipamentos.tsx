@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { getStorageUrl } from '../lib/storage'
 import {
   useApp, CATEGORIAS, ESTADOS_BR, isLinhaAmarela, EQUIPMENT_STATUS, VOLTAGENS,
   type Equipamento, type NovoEquipamento, type Chat, type Consumivel
@@ -687,8 +688,7 @@ export default function MeusEquipamentos({ embedded = false, abrirNovo = false, 
   const getImageUrl = (path: string | null | undefined): string | null => {
     if (!path) return null
     if (path.startsWith('http') || path.startsWith('data:')) return path
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
+    return getStorageUrl(path)
   }
 
   // Status badge
