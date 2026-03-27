@@ -21,7 +21,10 @@
       "mcp__plugin_playwright_playwright__browser_network_requests",
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: corrigir responsividade mobile em 13 arquivos\n\n- App.tsx: BottomNav visível em todas as páginas do cliente\n- Storefront.tsx: fix tem_loja check, flex-wrap stats/filtros, list cards truncate\n- Home.tsx: fix texto Categorias invisível \\(white on white\\), overflow containers\n- ProductDetail.tsx: padding responsivo, modal scrollável, specs sem no-scrollbar\n- AuthPage.tsx: grid-cols-1 mobile, min-height reduzido\n- OwnerDashboard.tsx: KPIs/modals responsivos, nav overflow, reservas flex-wrap\n- StoreSettings.tsx: slug prefix responsivo, sticky header offset\n- ProductCard.tsx: badges em flex container \\(remove left hardcoded\\)\n- PremiumProductCard.tsx: preço e botão responsivos, min-w-0\n- Header.tsx: touch targets 44px mínimo\n- BottomNav.tsx: touch target botão fechar\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(dir:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)"
     ]
   }
 }
