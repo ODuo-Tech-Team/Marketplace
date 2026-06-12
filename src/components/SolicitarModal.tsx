@@ -54,7 +54,7 @@ export default function SolicitarModal({ isOpen, onClose, equipamento, onEnviar,
     if (!dataInicio || !dataFim) return 0
     const d1 = new Date(dataInicio)
     const d2 = new Date(dataFim)
-    return Math.max(0, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)))
+    return Math.max(1, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1)
   }
   const quantidadeDias = calcDias()
 

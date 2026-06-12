@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Star, CheckCircle2, Loader2, X } from 'lucide-react'
 import { useApp } from '../../contexts/AppContext'
 
@@ -11,6 +11,7 @@ interface ReviewCardProps {
 
 export default function ReviewCard({ rentalId, reviewerId, targetId, locadorNome }: ReviewCardProps) {
   const { submitReview, checkReviewExists } = useApp()
+  const mountedRef = useRef(true)
 
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
@@ -22,7 +23,13 @@ export default function ReviewCard({ rentalId, reviewerId, targetId, locadorNome
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    checkReviewExists(rentalId).then(exists => setAlreadyReviewed(exists))
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    checkReviewExists(rentalId).then(exists => {
+      if (mountedRef.current) setAlreadyReviewed(exists)
+    })
   }, [rentalId, checkReviewExists])
 
   // Auto-hide success message after 3 seconds

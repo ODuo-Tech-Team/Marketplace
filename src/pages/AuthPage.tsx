@@ -322,23 +322,17 @@ export default function AuthPage() {
     }
 
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
-        .single()
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email.toLowerCase().trim(),
+        { redirectTo: `${window.location.origin}/reset-password` }
+      )
 
-      if (profileError || !profile) {
-        setResetEmailSent(true)
-        setLoading(false)
-        return
+      if (resetError) {
+        // Nao revela se o email existe ou nao (seguranca)
+        if (import.meta.env.DEV) console.error('Erro no reset:', resetError)
       }
 
-      await supabase
-        .from('profiles')
-        .update({ solicitou_reset: true })
-        .eq('id', profile.id)
-
+      // Sempre mostra sucesso (nao revela se email existe)
       setResetEmailSent(true)
       setLoading(false)
     } catch {

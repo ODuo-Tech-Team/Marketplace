@@ -61,12 +61,14 @@ export function FinancialWallet({ locacoes, onMarcarPago }: FinancialWalletProps
   }
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00')
+    const normalized = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00'
+    const date = new Date(normalized)
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
   }
 
   const formatDateShort = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00')
+    const normalized = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00'
+    const date = new Date(normalized)
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
   }
 

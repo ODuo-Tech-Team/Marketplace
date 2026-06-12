@@ -73,7 +73,7 @@ export function FileAttachment({
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
       console.error('Erro inesperado ao baixar:', err)
       window.open(publicUrl, '_blank')

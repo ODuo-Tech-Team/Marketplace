@@ -356,16 +356,7 @@ export default function StoreSettings() {
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
       const fileName = `lojas/${user.id}/${type}-${Date.now()}.${fileExt}`
 
-      // Deleta imagem antiga se existir
-      const oldUrl = type === 'banner' ? formData.banner_url : formData.avatar_url
-      if (oldUrl) {
-        const oldPath = oldUrl.split('/equipamentos/')[1]
-        if (oldPath) {
-          await supabase.storage.from('equipamentos').remove([oldPath])
-        }
-      }
-
-      // Upload nova imagem
+      // Upload nova imagem PRIMEIRO (antes de deletar a antiga)
       const { error: uploadError } = await supabase.storage
         .from('equipamentos')
         .upload(fileName, file, {
@@ -374,6 +365,15 @@ export default function StoreSettings() {
         })
 
       if (uploadError) throw uploadError
+
+      // So deleta a antiga DEPOIS do upload ter sucesso
+      const oldUrl = type === 'banner' ? formData.banner_url : formData.avatar_url
+      if (oldUrl) {
+        const oldPath = oldUrl.split('/equipamentos/')[1]
+        if (oldPath) {
+          await supabase.storage.from('equipamentos').remove([oldPath])
+        }
+      }
 
       // Retorna URL publica
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -428,7 +428,9 @@ export default function StoreSettings() {
       const updateData: Record<string, unknown> = {
         banner_url: formData.banner_url,
         avatar_url: formData.avatar_url,
-        bio: formData.bio
+        bio: formData.bio,
+        cor_marca: formData.cor_marca,
+        loja_slug: slugInput || null,
       }
 
       const { error } = await supabase

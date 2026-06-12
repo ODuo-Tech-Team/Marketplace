@@ -530,7 +530,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('equipamentos')
           .select('*')
-          .eq('disponivel', true)
+          .in('status', ['DISPONIVEL', 'disponivel'])
           .order('created_at', { ascending: false })
 
         if (fallbackError) {
@@ -2118,24 +2118,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return { success: false, error: equipamentoError.message }
         }
 
-        // 4. Deleta o chat e suas mensagens para permitir nova locação sem conflitos
+        // 4. Arquiva o chat (soft-delete) para preservar historico
         if (chatData?.id) {
-          // Primeiro deleta todas as mensagens do chat
-          const { error: deleteMsgError } = await supabase
-            .from('mensagens')
-            .delete()
-            .eq('chat_id', chatData.id)
-
-          if (deleteMsgError) {
-          }
-
-          // Depois deleta o chat
-          const { error: deleteChatError } = await supabase
+          const { error: archiveError } = await supabase
             .from('chats')
-            .delete()
+            .update({ archived: true })
             .eq('id', chatData.id)
 
-          if (deleteChatError) {
+          if (archiveError) {
+            if (import.meta.env.DEV) console.error('Erro ao arquivar chat:', archiveError)
           }
         }
 

@@ -130,7 +130,7 @@ export function generateSpecsSummary(
   // Specs do equipamento (JSONB flexível por vertical)
   if (equipamento.specs && typeof equipamento.specs === 'object') {
     Object.entries(equipamento.specs).forEach(([key, value]) => {
-      if (value) {
+      if (value !== null && value !== undefined && value !== '') {
         // Formata chave (camelCase -> Sentence case)
         const label = key
           .replace(/([A-Z])/g, ' $1')
