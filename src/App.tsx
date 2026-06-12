@@ -1,27 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppProvider, useApp } from './contexts/AppContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { LoginModalProvider } from './contexts/LoginModalContext'
-import AuthPage from './pages/AuthPage'
-import Home from './pages/Home'
-import OwnerDashboard from './components/OwnerDashboard'
-import MeusEquipamentos from './pages/MeusEquipamentos'
-import ChatPage from './pages/ChatPage'
-import ChatSplitPage from './pages/ChatSplitPage'
-import Adm from './pages/Adm'
-import AdminLogin from './pages/AdminLogin'
-import ProductDetail from './pages/ProductDetail'
-import MeusPedidos from './pages/MeusPedidos'
-import Favoritos from './pages/Favoritos'
-import Storefront from './pages/Storefront'
-import StoreSettings from './pages/StoreSettings'
 import BottomNav from './components/BottomNav'
 import TraktoLogo from './components/TraktoLogo'
 import { NotificationListener } from './components/NotificationListener'
 import LoginModal from './components/LoginModal'
+
+const AuthPage = lazy(() => import('./pages/AuthPage'))
+const Home = lazy(() => import('./pages/Home'))
+const OwnerDashboard = lazy(() => import('./components/OwnerDashboard'))
+const MeusEquipamentos = lazy(() => import('./pages/MeusEquipamentos'))
+const ChatPage = lazy(() => import('./pages/ChatPage'))
+const ChatSplitPage = lazy(() => import('./pages/ChatSplitPage'))
+const Adm = lazy(() => import('./pages/Adm'))
+const AdminLogin = lazy(() => import('./pages/AdminLogin'))
+const ProductDetail = lazy(() => import('./pages/ProductDetail'))
+const MeusPedidos = lazy(() => import('./pages/MeusPedidos'))
+const Favoritos = lazy(() => import('./pages/Favoritos'))
+const Storefront = lazy(() => import('./pages/Storefront'))
+const StoreSettings = lazy(() => import('./pages/StoreSettings'))
 
 function SplashScreen({ onForceEntry }: { onForceEntry: () => void }) {
   const [showFailsafe, setShowFailsafe] = useState(false)
@@ -160,6 +161,7 @@ function AppRoutes() {
   // - Outras rotas requerem autenticação
   return (
     <LayoutWithBottomNav>
+      <Suspense fallback={<SplashScreen onForceEntry={() => setForceEntry(true)} />}>
       <Routes>
         {/* Rota admin com guard próprio - acessível sempre */}
         <Route path="/admLoca" element={<AdminGuard><Adm /></AdminGuard>} />
@@ -201,6 +203,7 @@ function AppRoutes() {
           </>
         )}
       </Routes>
+      </Suspense>
     </LayoutWithBottomNav>
   )
 }

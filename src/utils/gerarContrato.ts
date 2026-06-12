@@ -67,11 +67,17 @@ interface DadosContratoCompleto {
 // Formata data para pt-BR
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return 'Não informado'
-  return new Date(dateStr).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  })
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return 'Data indisponível'
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  } catch {
+    return 'Data indisponível'
+  }
 }
 
 // Formata valor em reais
@@ -497,7 +503,7 @@ export function gerarContratoCompleto(dados: DadosContratoCompleto): void {
   }
 
   // ========== DOWNLOAD ==========
-  const equipamentoNome = dados.equipamento.nome.replace(/\s+/g, '_')
+  const equipamentoNome = (dados.equipamento.nome || 'Equipamento').replace(/\s+/g, '_')
   const contratoIdCurto = dados.contratoId.substring(0, 8)
   const nomeArquivo = `Contrato_Locacao_${equipamentoNome}_${contratoIdCurto}.pdf`
   doc.save(nomeArquivo)

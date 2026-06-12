@@ -76,7 +76,7 @@ function calcularDiasEntreDatas(inicio: string, fim: string): number {
   const d1 = new Date(inicio)
   const d2 = new Date(fim)
   const diff = d2.getTime() - d1.getTime()
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+  return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1)
 }
 
 export function PropostaModal({

@@ -4,12 +4,12 @@ import {
   ShieldCheck, Loader2, Package, HardHat
 } from 'lucide-react'
 import { type Equipamento, isLinhaAmarela, ESTADOS_BR } from '../contexts/AppContext'
+import { getStorageUrl } from '../lib/storage'
 
 function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null
   if (path.startsWith('http') || path.startsWith('data:')) return path
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
+  return getStorageUrl(path)
 }
 
 interface SolicitarModalProps {
@@ -54,7 +54,7 @@ export default function SolicitarModal({ isOpen, onClose, equipamento, onEnviar,
     if (!dataInicio || !dataFim) return 0
     const d1 = new Date(dataInicio)
     const d2 = new Date(dataFim)
-    return Math.max(0, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)))
+    return Math.max(1, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1)
   }
   const quantidadeDias = calcDias()
 

@@ -1,0 +1,18 @@
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Nao informado'
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+export function toDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0]
+}

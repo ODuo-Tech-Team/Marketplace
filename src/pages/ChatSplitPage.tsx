@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { getStatusInfo, isSystemMessage } from '../utils/chat'
-import { gerarTermoLocacao } from '../utils/gerarContrato'
+import { getStorageUrl } from '../lib/storage'
 import { ChatStatusBar } from '../components/chat/ChatStatusBar'
 import TraktoLogo from '../components/TraktoLogo'
 import { ContractGeneratorModal } from '../components/ContractGeneratorModal'
@@ -22,8 +22,7 @@ import { FileAttachment } from '../components/chat/FileAttachment'
 function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null
   if (path.startsWith('http') || path.startsWith('data:')) return path
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
+  return getStorageUrl(path)
 }
 
 function getChatStatusInfo(chat: Chat | null): { label: string; gradient: string } {
@@ -916,7 +915,7 @@ export default function ChatSplitPage() {
         setChat(chatData)
       }
     } catch (err) {
-      console.error('[ChatSplitPage] Erro ao carregar chat:', err)
+      if (import.meta.env.DEV) console.error('[ChatSplitPage] Erro ao carregar chat:', err)
       if (mountedRef.current) {
         setChatNotFound(true)
       }
@@ -931,7 +930,7 @@ export default function ChatSplitPage() {
       setMensagens(msgs)
       if (user?.id) marcarMensagensComoLidas(id, user.id)
     } catch (err) {
-      console.error('[ChatSplitPage] Erro ao carregar mensagens:', err)
+      if (import.meta.env.DEV) console.error('[ChatSplitPage] Erro ao carregar mensagens:', err)
     }
   }
 
@@ -980,10 +979,8 @@ export default function ChatSplitPage() {
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[ChatSplitPage] Mensagens realtime conectado:', chatId)
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('[ChatSplitPage] Erro na subscription de mensagens')
+        if (status === 'CHANNEL_ERROR') {
+          if (import.meta.env.DEV) console.error('[ChatSplitPage] Erro na subscription de mensagens')
         }
       })
 
@@ -994,7 +991,7 @@ export default function ChatSplitPage() {
       )
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR') {
-          console.error('[ChatSplitPage] Erro na subscription de propostas')
+          if (import.meta.env.DEV) console.error('[ChatSplitPage] Erro na subscription de propostas')
         }
       })
 
@@ -1005,7 +1002,7 @@ export default function ChatSplitPage() {
       )
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR') {
-          console.error('[ChatSplitPage] Erro na subscription de chat updates')
+          if (import.meta.env.DEV) console.error('[ChatSplitPage] Erro na subscription de chat updates')
         }
       })
 
@@ -1034,7 +1031,6 @@ export default function ChatSplitPage() {
         channelsRef.current.forEach(channel => {
           const state = channel.state
           if (state === 'closed' || state === 'errored') {
-            console.log('[ChatSplitPage] Reconectando canal:', channel.topic)
             channel.subscribe()
           }
         })
@@ -1142,7 +1138,7 @@ export default function ChatSplitPage() {
         setErroEnvio(mensagemResult.error || 'Erro ao enviar mensagem com arquivo')
       }
     } catch (err) {
-      console.error('Erro no upload de arquivo:', err)
+      if (import.meta.env.DEV) console.error('Erro no upload de arquivo:', err)
       setErroEnvio('Erro inesperado ao enviar arquivo')
     } finally {
       setUploadingFile(false)

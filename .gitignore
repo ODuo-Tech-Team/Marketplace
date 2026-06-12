@@ -48,7 +48,15 @@ supabase/.temp/
 *.tmp
 *.temp
 
+# Credentials (keep local only)
+ACESSOS.md
+
 # OS files
 Thumbs.db
 .vercel
 .env*.local
+
+# Clones locais do projeto (não versionar)
+Marketplace-fixes/
+Marketplace-rls/
+Marketplace-split/

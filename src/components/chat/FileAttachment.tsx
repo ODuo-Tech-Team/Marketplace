@@ -29,11 +29,7 @@ function getFileIcon(tipo: string) {
   return <File className="w-5 h-5" />
 }
 
-// Gera URL publica para o arquivo
-function getPublicUrl(path: string): string {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  return `${supabaseUrl}/storage/v1/object/public/equipamentos/${path}`
-}
+import { getStorageUrl } from '../../lib/storage'
 
 export function FileAttachment({
   arquivoUrl,
@@ -47,7 +43,7 @@ export function FileAttachment({
 
   const isImage = arquivoTipo.startsWith('image/')
   const isPdf = arquivoTipo === 'application/pdf'
-  const publicUrl = getPublicUrl(arquivoUrl)
+  const publicUrl = getStorageUrl(arquivoUrl)
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -73,7 +69,7 @@ export function FileAttachment({
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
       console.error('Erro inesperado ao baixar:', err)
       window.open(publicUrl, '_blank')

@@ -28,6 +28,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useApp, type Chat, type Proposta, getEquipamentoImageUrl } from '../contexts/AppContext'
 import { supabase } from '../lib/supabase'
+import { getStorageUrl } from '../lib/storage'
 import TraktoLogo from '../components/TraktoLogo'
 import { gerarTermoLocacao } from '../utils/gerarContrato'
 
@@ -180,7 +181,7 @@ export default function MeusPedidos() {
 
         setOrders(items)
       } catch (err) {
-        console.error('Erro ao carregar pedidos:', err)
+        if (import.meta.env.DEV) console.error('Erro ao carregar pedidos:', err)
       } finally {
         setLoading(false)
       }
@@ -258,9 +259,9 @@ export default function MeusPedidos() {
   }, [orders])
 
   // Função para baixar contrato PDF
-  const handleDownloadContrato = (doc: typeof documents[0]) => {
+  const handleDownloadContrato = async (doc: typeof documents[0]) => {
     if (!doc.chat || !doc.proposta || !doc.chat.equipamento) return
-    gerarTermoLocacao({
+    await gerarTermoLocacao({
       proposta: doc.proposta,
       chat: doc.chat,
       equipamento: doc.chat.equipamento,
@@ -697,7 +698,7 @@ export default function MeusPedidos() {
                         const fotoUrl = eq.fotos?.[0]
                           ? eq.fotos[0].startsWith('http')
                             ? eq.fotos[0]
-                            : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/equipamentos/${eq.fotos[0]}`
+                            : getStorageUrl(eq.fotos[0])
                           : null
 
                         return (

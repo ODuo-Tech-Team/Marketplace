@@ -109,8 +109,9 @@ export default function AuthPage() {
       setLoading(false)
       return
     }
-    if (password.length < 6) {
-      setError('A senha deve ter no mínimo 6 caracteres')
+    const pwError = validatePassword(password)
+    if (pwError) {
+      setError(pwError)
       setLoading(false)
       return
     }
@@ -173,8 +174,9 @@ export default function AuthPage() {
       setLoading(false)
       return
     }
-    if (password.length < 6) {
-      setError('A senha deve ter no mínimo 6 caracteres')
+    const pwError = validatePassword(password)
+    if (pwError) {
+      setError(pwError)
       setLoading(false)
       return
     }
@@ -678,11 +680,12 @@ export default function AuthPage() {
                     <InputField
                       icon={<Lock size={18} className="text-foreground-muted" />}
                       type="password"
-                      placeholder="Senha (mínimo 6 caracteres)"
+                      placeholder="Senha (mín. 8 caracteres)"
                       value={password}
                       onChange={setPassword}
                       ringColor="focus-within:ring-indigo-500"
                     />
+                    <PasswordStrengthIndicator password={password} />
                   </div>
                 </div>
               </div>
@@ -818,13 +821,14 @@ export default function AuthPage() {
                       <Lock size={18} className="text-slate-400" />
                       <input
                         type="password"
-                        placeholder="Senha"
+                        placeholder="Senha (mín. 8 caracteres)"
                         className="w-full bg-transparent outline-none font-medium text-slate-900 dark:text-white text-sm placeholder:text-slate-400"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                       />
                     </div>
                   </div>
+                  <PasswordStrengthIndicator password={password} />
                 </div>
               </div>
 
@@ -836,8 +840,9 @@ export default function AuthPage() {
                     setError('Preencha todos os campos obrigatórios antes de continuar')
                     return
                   }
-                  if (password.length < 6) {
-                    setError('A senha deve ter no mínimo 6 caracteres')
+                  const pwErr = validatePassword(password)
+                  if (pwErr) {
+                    setError(pwErr)
                     return
                   }
                   setError(null)
@@ -1019,6 +1024,42 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-400 text-sm font-medium">
       {message}
+    </div>
+  )
+}
+
+function validatePassword(pw: string): string | null {
+  if (pw.length < 8) return 'A senha deve ter no mínimo 8 caracteres'
+  if (!/[A-Z]/.test(pw)) return 'A senha deve conter pelo menos 1 letra maiúscula'
+  if (!/[0-9]/.test(pw)) return 'A senha deve conter pelo menos 1 número'
+  return null
+}
+
+function PasswordStrengthIndicator({ password }: { password: string }) {
+  if (!password) return null
+
+  const checks = [
+    { label: '8+ caracteres', met: password.length >= 8 },
+    { label: '1 maiúscula', met: /[A-Z]/.test(password) },
+    { label: '1 número', met: /[0-9]/.test(password) },
+  ]
+
+  const metCount = checks.filter(c => c.met).length
+  const barColor = metCount === 3 ? 'bg-emerald-500' : metCount >= 2 ? 'bg-amber-500' : 'bg-red-400'
+  const barWidth = `${(metCount / 3) * 100}%`
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="h-1.5 bg-gray-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: barWidth }} />
+      </div>
+      <div className="flex gap-3 flex-wrap">
+        {checks.map(({ label, met }) => (
+          <span key={label} className={`text-xs font-medium ${met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+            {met ? '\u2713' : '\u25CB'} {label}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

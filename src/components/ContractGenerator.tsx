@@ -163,7 +163,7 @@ export function ContractGenerator({
     setContractData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     try {
       setGenerating(true)
       setError(null)
@@ -219,7 +219,7 @@ export function ContractGenerator({
         }
       }
 
-      gerarContratoCompleto(dadosParaPDF)
+      await gerarContratoCompleto(dadosParaPDF)
       setGenerating(false)
     } catch (error) {
       setError('Erro ao gerar PDF. Verifique os dados e tente novamente.')

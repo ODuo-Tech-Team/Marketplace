@@ -193,7 +193,7 @@ export default function Adm() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('[Adm] Erro ao carregar usuários:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar usuários:', error)
         setError('Erro ao carregar usuários')
         return
       }
@@ -213,7 +213,7 @@ export default function Adm() {
 
       setUsuarios(lista)
     } catch (err) {
-      console.error('[Adm] Erro ao carregar usuários:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar usuários:', err)
       setError('Erro inesperado ao carregar usuários')
     } finally {
       setLoadingUsuarios(false)
@@ -258,7 +258,7 @@ export default function Adm() {
         .eq('id', usuario.id)
 
       if (error) {
-        console.error('[Adm] Erro ao alterar verificado:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar verificado:', error)
         setError(`Erro ao alterar status: ${error.message}`)
         return
       }
@@ -274,7 +274,7 @@ export default function Adm() {
       // Atualiza contadores
       await carregarResumo()
     } catch (err) {
-      console.error('[Adm] Erro ao alterar verificado:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar verificado:', err)
       setError('Erro inesperado ao alterar status')
     } finally {
       setAlternandoVerificado(null)
@@ -293,7 +293,7 @@ export default function Adm() {
         .eq('id', usuario.id)
 
       if (error) {
-        console.error('[Adm] Erro ao alterar destaque PRO:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar destaque PRO:', error)
         setError(`Erro ao alterar destaque: ${error.message}`)
         return
       }
@@ -307,7 +307,7 @@ export default function Adm() {
       setTimeout(() => setSucessoUsuario(null), 3000)
 
     } catch (err) {
-      console.error('[Adm] Erro ao alterar destaque PRO:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar destaque PRO:', err)
       setError('Erro inesperado ao alterar destaque')
     } finally {
       setAlternandoDestacado(null)
@@ -326,7 +326,7 @@ export default function Adm() {
         .eq('id', usuario.id)
 
       if (error) {
-        console.error('[Adm] Erro ao alterar status da loja:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar status da loja:', error)
         setError(`Erro ao alterar loja: ${error.message}`)
         return
       }
@@ -340,7 +340,7 @@ export default function Adm() {
       setTimeout(() => setSucessoUsuario(null), 3000)
 
     } catch (err) {
-      console.error('[Adm] Erro ao alterar status da loja:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar status da loja:', err)
       setError('Erro inesperado ao alterar status da loja')
     } finally {
       setAlternandoTemLoja(null)
@@ -382,14 +382,14 @@ export default function Adm() {
       })
 
       if (fnError) {
-        console.error('[Adm] Erro da Edge Function:', fnError)
+        if (import.meta.env.DEV) console.error('[Adm] Erro da Edge Function:', fnError)
         setError(fnError.message || 'Erro ao resetar senha')
         setResetandoSenha(null)
         return
       }
 
       if (data?.error) {
-        console.error('[Adm] Erro retornado:', data.error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro retornado:', data.error)
         setError(data.error)
         setResetandoSenha(null)
         return
@@ -412,7 +412,7 @@ export default function Adm() {
 
       await carregarResumo()
     } catch (err) {
-      console.error('[Adm] Erro ao resetar senha:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao resetar senha:', err)
       setError('Erro de conexão ao resetar senha')
     } finally {
       setResetandoSenha(null)
@@ -436,14 +436,14 @@ export default function Adm() {
       })
 
       if (fnError) {
-        console.error('[Adm] Erro da Edge Function:', fnError)
+        if (import.meta.env.DEV) console.error('[Adm] Erro da Edge Function:', fnError)
         setError(fnError.message || 'Erro ao excluir usuário')
         setExcluindoUsuario(null)
         return
       }
 
       if (data?.error) {
-        console.error('[Adm] Erro retornado:', data.error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro retornado:', data.error)
         setError(data.error)
         setExcluindoUsuario(null)
         return
@@ -455,7 +455,7 @@ export default function Adm() {
 
       await carregarResumo()
     } catch (err) {
-      console.error('[Adm] Erro ao excluir usuário:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao excluir usuário:', err)
       setError('Erro inesperado ao excluir usuário')
     } finally {
       setExcluindoUsuario(null)
@@ -477,7 +477,7 @@ export default function Adm() {
         .eq('id', usuario.id)
 
       if (error) {
-        console.error('[Adm] Erro ao limpar pedido:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao limpar pedido:', error)
         setError(`Erro ao limpar pedido: ${error.message}`)
         return
       }
@@ -492,7 +492,7 @@ export default function Adm() {
 
       await carregarResumo()
     } catch (err) {
-      console.error('[Adm] Erro ao limpar pedido:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao limpar pedido:', err)
       setError('Erro inesperado ao limpar pedido')
     }
   }
@@ -599,7 +599,7 @@ export default function Adm() {
         total_equipamentos: equipamentos.length
       })
     } catch (err) {
-      console.error('[Adm] Erro ao carregar detalhes:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar detalhes:', err)
       setDetalheLocador(null)
     } finally {
       setLoadingDetalhe(false)
@@ -687,7 +687,7 @@ export default function Adm() {
 
       setRankingClientes(ranking)
     } catch (err) {
-      console.error('[Adm] Erro ao carregar ranking clientes:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar ranking clientes:', err)
       setRankingClientes([])
     }
   }
@@ -762,7 +762,7 @@ export default function Adm() {
 
       setInventarioQuente(inventario)
     } catch (err) {
-      console.error('[Adm] Erro ao carregar inventário quente:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar inventário quente:', err)
       setInventarioQuente([])
     }
   }
@@ -840,7 +840,7 @@ export default function Adm() {
 
       setReceitaMensal(result.reverse())
     } catch (err) {
-      console.error('[Adm] Erro ao carregar receita mensal:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar receita mensal:', err)
       setReceitaMensal([])
     }
   }
@@ -871,7 +871,7 @@ export default function Adm() {
         .order('nome')
 
       if (eqError || !equipamentos) {
-        console.error('[Adm] Erro ao carregar equipamentos admin:', eqError)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar equipamentos admin:', eqError)
         setEquipamentosAdmin([])
         return
       }
@@ -900,7 +900,7 @@ export default function Adm() {
 
       setEquipamentosAdmin(lista)
     } catch (err) {
-      console.error('[Adm] Erro ao carregar equipamentos admin:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar equipamentos admin:', err)
       setEquipamentosAdmin([])
     } finally {
       setLoadingEquipAdmin(false)
@@ -916,7 +916,7 @@ export default function Adm() {
         .eq('id', eqId)
 
       if (error) {
-        console.error('[Adm] Erro ao alterar destaque:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar destaque:', error)
         setError(`Erro ao alterar destaque: ${error.message}`)
         return
       }
@@ -925,7 +925,7 @@ export default function Adm() {
         prev.map(eq => eq.id === eqId ? { ...eq, destaque: !current } : eq)
       )
     } catch (err) {
-      console.error('[Adm] Erro ao alterar destaque:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar destaque:', err)
       setError('Erro inesperado ao alterar destaque')
     } finally {
       setToggling(null)
@@ -944,7 +944,7 @@ export default function Adm() {
         .eq('id', eqId)
 
       if (error) {
-        console.error('[Adm] Erro ao alterar selo:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar selo:', error)
         setError(`Erro ao alterar selo: ${error.message}`)
         return
       }
@@ -953,7 +953,7 @@ export default function Adm() {
         prev.map(eq => eq.id === eqId ? { ...eq, selo_verificado: !current } : eq)
       )
     } catch (err) {
-      console.error('[Adm] Erro ao alterar selo:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao alterar selo:', err)
       setError('Erro inesperado ao alterar selo')
     } finally {
       setTogglingSelo(null)
@@ -994,7 +994,7 @@ export default function Adm() {
       ])
       setLastUpdate(new Date())
     } catch (err) {
-      console.error('[Adm] Erro:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro:', err)
       setError('Erro ao carregar dados do dashboard')
     } finally {
       setLoading(false)
@@ -1010,7 +1010,7 @@ export default function Adm() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('[Adm] Erro ao carregar usuários reset:', error)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar usuários reset:', error)
         return
       }
 
@@ -1023,7 +1023,7 @@ export default function Adm() {
 
       setUsuariosReset(usuarios)
     } catch (err) {
-      console.error('[Adm] Erro ao carregar usuários reset:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar usuários reset:', err)
     }
   }
 
@@ -1037,7 +1037,7 @@ export default function Adm() {
       })
 
       if (resetError) {
-        console.error('[Adm] Erro ao enviar reset:', resetError)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao enviar reset:', resetError)
         setError(`Erro ao enviar reset para ${usuario.email}: ${resetError.message}`)
         setEnviandoReset(null)
         return
@@ -1049,7 +1049,7 @@ export default function Adm() {
         .eq('id', usuario.id)
 
       if (updateError) {
-        console.error('[Adm] Erro ao limpar flag:', updateError)
+        if (import.meta.env.DEV) console.error('[Adm] Erro ao limpar flag:', updateError)
       }
 
       setUsuariosReset(prev => prev.filter(u => u.id !== usuario.id))
@@ -1061,7 +1061,7 @@ export default function Adm() {
       setTimeout(() => setResetSucesso(null), 3000)
       await carregarResumo()
     } catch (err) {
-      console.error('[Adm] Erro inesperado:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro inesperado:', err)
       setError('Erro inesperado ao enviar reset')
     } finally {
       setEnviandoReset(null)
@@ -1122,7 +1122,7 @@ export default function Adm() {
         locadores_verificados: locadoresVerificados || 0
       })
     } catch (err) {
-      console.error('[Adm] Erro ao carregar resumo:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar resumo:', err)
       throw err
     }
   }
@@ -1204,7 +1204,7 @@ export default function Adm() {
       listaLocadoras.sort((a, b) => b.total_locacoes - a.total_locacoes)
       setLocadoras(listaLocadoras)
     } catch (err) {
-      console.error('[Adm] Erro ao carregar locadoras:', err)
+      if (import.meta.env.DEV) console.error('[Adm] Erro ao carregar locadoras:', err)
     }
   }
 
